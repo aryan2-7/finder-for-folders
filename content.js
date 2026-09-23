@@ -220,6 +220,50 @@
   });
   menu.appendChild(hiddenToggle);
 
+  // icon size slider, kept in localStorage same as the other settings
+  const sizeDivider = document.createElement("div");
+  sizeDivider.className = "finder-settings-divider";
+  menu.appendChild(sizeDivider);
+
+  const MIN_ICON = 48;
+  const MAX_ICON = 256;
+  const DEFAULT_ICON = 125;
+  let iconSize = parseInt(localStorage.getItem("finderIconSize"), 10);
+  if (!iconSize || iconSize < MIN_ICON || iconSize > MAX_ICON) iconSize = DEFAULT_ICON;
+
+  const sizeRow = document.createElement("div");
+  sizeRow.className = "finder-settings-slider-row";
+
+  const sizeHeading = document.createElement("div");
+  sizeHeading.className = "finder-settings-heading";
+  sizeHeading.textContent = "Icon size";
+  sizeRow.appendChild(sizeHeading);
+
+  const sizeSlider = document.createElement("input");
+  sizeSlider.type = "range";
+  sizeSlider.className = "finder-settings-slider";
+  sizeSlider.min = String(MIN_ICON);
+  sizeSlider.max = String(MAX_ICON);
+  sizeSlider.value = String(iconSize);
+  sizeSlider.setAttribute("aria-label", "Icon size");
+  sizeRow.appendChild(sizeSlider);
+  menu.appendChild(sizeRow);
+
+  function setIconSize(value) {
+    iconSize = value;
+    localStorage.setItem("finderIconSize", String(iconSize));
+    document.body.style.setProperty("--icon-size", iconSize + "px");
+  }
+
+  // apply on load and live-update while dragging
+  setIconSize(iconSize);
+  sizeSlider.addEventListener("input", () => {
+    setIconSize(parseInt(sizeSlider.value, 10));
+  });
+  // slider drag shouldn't close the menu like the other items do
+  sizeSlider.addEventListener("click", (e) => e.stopPropagation());
+  sizeSlider.addEventListener("mousedown", (e) => e.stopPropagation());
+
   const menuDivider = document.createElement("div");
   menuDivider.className = "finder-settings-divider";
   menu.appendChild(menuDivider);
@@ -252,6 +296,37 @@
 
   let selected = null;
 
+  // Background-tab, the scripts can't use chrome.tabs, new window or opens in same tab, so we use background.js after chrome.tabs.create(active:false)
+  function openInBackgroundTab(href) {
+    const url = new URL(href, location.href).href;
+    try {
+      if (chrome && chrome.runtime && chrome.runtime.sendMessage) {
+        const result = chrome.runtime.sendMessage({
+          type: "finder-open-background-tab",
+          url,
+        });
+        // MV3 sendMessage returns a promise; a rejection means no listener
+        if (result && typeof result.catch === "function") {
+          result.catch(() => fallbackForegroundTab(url));
+        }
+        return;
+      }
+    } catch (e) {
+      // fall through to anchor fallback
+    }
+    fallbackForegroundTab(url);
+  }
+
+  function fallbackForegroundTab(url) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
   // builds the tile grid using the current sortMode
   function renderGrid() {
     const freshGrid = document.createElement("div");
@@ -283,17 +358,25 @@
       tile.appendChild(iconWrap);
       tile.appendChild(label);
 
-      // Single click only selects, double click opens
+      // Single click selects; Cmd/Ctrl+click opens in a background tab
       tile.addEventListener("click", (e) => {
         e.preventDefault();
         if (selected) selected.classList.remove("selected");
         tile.classList.add("selected");
         selected = tile;
+        if (e.ctrlKey || e.metaKey) {
+          openInBackgroundTab(tile.href);
+        }
       });
 
       tile.addEventListener("dblclick", (e) => {
         e.preventDefault();
-        window.location.href = tile.href;
+        // Shift+double-click opens in a background tab, same as Shift+Enter
+        if (e.shiftKey) {
+          openInBackgroundTab(tile.href);
+        } else {
+          window.location.href = tile.href;
+        }
       });
 
       freshGrid.appendChild(tile);
@@ -316,18 +399,29 @@
   // Basic keyboard nav with arrow keys and Enter to move and open
   const tiles = () => Array.from(grid.querySelectorAll(".finder-tile"));
   document.addEventListener("keydown", (e) => {
+    // Cmd/Ctrl+Left/Right is browser back/forward, don't override
+    if ((e.metaKey || e.ctrlKey) && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+      return;
+    }
+
     const list = tiles();
     if (list.length === 0) return;
     let idx = selected ? list.indexOf(selected) : -1;
 
-    const cols = Math.max(1, Math.floor(grid.clientWidth / 155));
+    // column count has to follow the icon size, otherwise Up/Down jumps wrong
+    const cols = Math.max(1, Math.floor(grid.clientWidth / (iconSize + 30)));
 
     if (e.key === "ArrowRight") idx = Math.min(list.length - 1, idx + 1);
     else if (e.key === "ArrowLeft") idx = Math.max(0, idx - 1);
     else if (e.key === "ArrowDown") idx = Math.min(list.length - 1, idx + cols);
     else if (e.key === "ArrowUp") idx = Math.max(0, idx - cols);
     else if (e.key === "Enter" && selected) {
-      window.location.href = selected.href;
+      // Shift+Enter opens in a background tab, plain Enter navigates in place
+      if (e.shiftKey) {
+        openInBackgroundTab(selected.href);
+      } else {
+        window.location.href = selected.href;
+      }
       return;
     } else {
       return;

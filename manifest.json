@@ -3,6 +3,10 @@
   "name": "Finder for Folders",
   "version": "0.1.0",
   "description": "Makes your browser's file:// folder listing look like macOS Finder.",
+  "host_permissions": ["file:///*"],
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
       "matches": ["file:///*"],

@@ -114,6 +114,21 @@ html, body.finder-body {
   background: #3d3d3d;
 }
 
+/* icon size slider row */
+.finder-settings-slider-row {
+  padding: 6px 8px 8px;
+}
+
+.finder-settings-slider-row .finder-settings-heading {
+  padding: 0 0 4px;
+}
+
+.finder-settings-slider {
+  width: 100%;
+  accent-color: #0a84ff;
+  cursor: default;
+}
+
 .finder-settings-link {
   color: #9fa3a8;
   text-decoration: none;
@@ -140,9 +155,14 @@ html, body.finder-body {
   visibility: visible;
 }
 
+/* --icon-size drives tile/grid scale too, set via the settings slider (defaults to 125px) */
+.finder-body {
+  --icon-size: 125px;
+}
+
 .finder-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(147px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--icon-size) + 22px), 1fr));
   gap: 18px 8px;
   padding: 20px;
 }
@@ -158,7 +178,7 @@ html, body.finder-body {
   cursor: default;
   user-select: none;
   /* fixed footprint so every tile lines up regardless of label length */
-  height: 180px;
+  height: calc(var(--icon-size) + 55px);
 }
 
 .finder-tile:hover {
@@ -175,8 +195,8 @@ html, body.finder-body {
 }
 
 .finder-icon {
-  width: 125px;
-  height: 125px;
+  width: var(--icon-size);
+  height: var(--icon-size);
   margin-bottom: 6px;
   /* keep it from shrinking when the label below wraps to 2 lines */
   flex-shrink: 0;
