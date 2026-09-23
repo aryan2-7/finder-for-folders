@@ -5,7 +5,7 @@ Makes your browser's `file://` folder listing look and behave like a macOS Finde
 ## Features (v0.1)
 
 - Finder-style dark icon grid for local folders
-- Per-type icons: folder, PDF, image, code, archive, generic file
+- Per-type icons: folder, PDF, image, video, code, archive, generic file
 - Breadcrumb title bar built from the URL path
 - Settings menu (gear, top right):
   - Sort by: `Name / Type (folders first) / Files first` stored in `localStorage`
@@ -32,6 +32,28 @@ Makes your browser's `file://` folder listing look and behave like a macOS Finde
 5. Click **Details** on the extension card → enable **Allow access to file URLs**. Required as Chrome might block `file://` access by default
 6. Open any local folder, e.g. `file:///Users/you/Desktop/`
 
+## Screenshot
+
+<table>
+  <tr>
+    <th>Without extension</th>
+    <th>With extension</th>
+  </tr>
+  <tr>
+    <td>
+      <img width="800" alt="Finder for Folders without extension" src="https://github.com/user-attachments/assets/5e6f9fd1-85f0-45df-a820-1805e7ba8a75"/>
+    </td>
+    <td>
+      <img width="800" alt="image" src="https://github.com/user-attachments/assets/c2a01e0d-ecd0-4350-a2ab-bf183709cead" />
+    </td>
+  </tr>
+</table>
+
+## What's next?
+- Adding a Status bar to show info for the selected file
+- Adding view options (list/grid), its just grid rn
+- Implement search
+- Show actual thumbnails for the files, insted of the current svg images
 
 ## How it works
 
