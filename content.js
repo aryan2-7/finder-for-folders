@@ -39,6 +39,7 @@
     folder: "folder",
     pdf: "pdf",
     image: "image",
+    video: "video",
     code: "code",
     archive: "archive",
     file: "file",
@@ -48,6 +49,8 @@
     pdf: ICONS.pdf,
     png: ICONS.image, jpg: ICONS.image, jpeg: ICONS.image, gif: ICONS.image,
     webp: ICONS.image, svg: ICONS.image, heic: ICONS.image,
+    mp4: ICONS.video, mov: ICONS.video, mkv: ICONS.video, webm: ICONS.video,
+    avi: ICONS.video, m4v: ICONS.video,
     js: ICONS.code, ts: ICONS.code, py: ICONS.code, cpp: ICONS.code, c: ICONS.code,
     h: ICONS.code, java: ICONS.code, html: ICONS.code, css: ICONS.code, json: ICONS.code,
     zip: ICONS.archive, tar: ICONS.archive, gz: ICONS.archive, rar: ICONS.archive, "7z": ICONS.archive,
@@ -60,12 +63,13 @@
 
   // Inline SVGs for efficiency (they be in there, swimming and stuff)
   const SVG = {
-    folder: `<svg viewBox="0 0 24 24" fill="none"><path d="M3 6.5C3 5.67 3.67 5 4.5 5H9l2 2h8.5c.83 0 1.5.67 1.5 1.5v9c0 .83-.67 1.5-1.5 1.5h-15C3.67 19 3 18.33 3 17.5v-11Z" fill="#5AB1FF"/><path d="M3 6.5C3 5.67 3.67 5 4.5 5H9l2 2h8.5c.83 0 1.5.67 1.5 1.5V9H3V6.5Z" fill="#8FCBFF"/></svg>`,
-    pdf: `<svg viewBox="0 0 24 24" fill="none"><path d="M6 2h8l4 4v16H6V2Z" fill="#EE3C36"/><path d="M14 2v4h4l-4-4Z" fill="#FF9B96"/><text x="12" y="17" font-size="6" fill="#fff" text-anchor="middle" font-family="Helvetica" font-weight="700">PDF</text></svg>`,
-    image: `<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="16" rx="2" fill="#FFD24C"/><circle cx="8" cy="10" r="2" fill="#fff"/><path d="M4 18l5-5 4 4 3-3 4 4v1a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z" fill="#fff"/></svg>`,
-    code: `<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="3" fill="#8E6BFF"/><path d="M9 8 6 12l3 4M15 8l3 4-3 4" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-    archive: `<svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="2" fill="#C9A15A"/><rect x="10.5" y="4" width="3" height="16" fill="#8C6C33"/></svg>`,
-    file: `<svg viewBox="0 0 24 24" fill="none"><path d="M6 2h8l4 4v16H6V2Z" fill="#D9DDE3"/><path d="M14 2v4h4l-4-4Z" fill="#F1F3F5"/></svg>`,
+    folder: `<svg viewBox="0 0 24 24" fill="none"><path d="M3 6.5C3 5.67 3.67 5 4.5 5H9l2 2h8.5c.83 0 1.5.67 1.5 1.5v9c0 .83-.67 1.5-1.5 1.5h-15C3.67 19 3 18.33 3 17.5v-11Z" fill="#5AB1FF" stroke="#2F7AC7" stroke-width="0.7" stroke-linejoin="round"/><path d="M3 6.5C3 5.67 3.67 5 4.5 5H9l2 2h8.5c.83 0 1.5.67 1.5 1.5V9H3V6.5Z" fill="#8FCBFF"/></svg>`,
+    pdf: `<svg viewBox="0 0 24 24" fill="none"><path d="M5 2.5c0-.55.45-1 1-1h6.5L19 8v13.5c0 .55-.45 1-1 1H6c-.55 0-1-.45-1-1V2.5Z" fill="#EC3A35" stroke="#A9231F" stroke-width="0.7" stroke-linejoin="round"/><path d="M12.5 1.5L19 8h-5.5c-.55 0-1-.45-1-1V1.5Z" fill="#FF9B96"/><text x="12" y="17.4" font-size="5.4" fill="#fff" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="800" letter-spacing="0.3">PDF</text></svg>`,
+    image: `<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="16" rx="3" fill="#FFD24C" stroke="#B98A12" stroke-width="0.7"/><circle cx="8.5" cy="10" r="2" fill="#fff"/><path d="M4 18l5-5 4 4 3-3 4 4v1a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-1Z" fill="#fff"/></svg>`,
+    video: `<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="3" fill="#3A4152" stroke="#1E222C" stroke-width="0.7"/><path d="M10.2 9.3v5.4L14.8 12l-4.6-2.7Z" fill="#fff" stroke="#fff" stroke-width="1" stroke-linejoin="round"/><rect x="6" y="15.8" width="12" height="1.4" rx="0.7" fill="#5A6376"/><rect x="6" y="15.8" width="5" height="1.4" rx="0.7" fill="#FF5A5A"/></svg>`,
+    code: `<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4" fill="#8E6BFF" stroke="#5B3FD4" stroke-width="0.7"/><path d="M9.2 8.5 6.5 12l2.7 3.5M14.8 8.5 17.5 12l-2.7 3.5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`,
+    archive: `<svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="5" width="17" height="15" rx="2.5" fill="#C9A15A" stroke="#7A5E2B" stroke-width="0.7"/><rect x="10.5" y="5" width="3" height="15" fill="#8C6C33"/><rect x="3.5" y="9" width="17" height="1.2" fill="#8C6C33" opacity="0.65"/><rect x="9.7" y="11.2" width="4.6" height="3.4" rx="0.8" fill="#E8D9B0" stroke="#7A5E2B" stroke-width="0.6"/></svg>`,
+    file: `<svg viewBox="0 0 24 24" fill="none"><path d="M5 2.5c0-.55.45-1 1-1h6.5L19 8v13.5c0 .55-.45 1-1 1H6c-.55 0-1-.45-1-1V2.5Z" fill="#D9DDE3" stroke="#9AA1AB" stroke-width="0.7" stroke-linejoin="round"/><path d="M12.5 1.5L19 8h-5.5c-.55 0-1-.45-1-1V1.5Z" fill="#F4F6F8"/><path d="M8 13h8M8 15.7h8M8 18.4h5" stroke="#9AA1AB" stroke-width="1.2" stroke-linecap="round"/></svg>`,
   };
 
   // wipe body and render our finder UI
@@ -112,20 +116,29 @@
   // hidden files (dotfiles like .DS_Store) stay off by default
   let showHidden = localStorage.getItem("finderShowHidden") === "true";
 
+  // case-insensitive name compare (with a case-sensitive tiebreak so order is stable)
+  function cmpNames(a, b) {
+    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }) ||
+      a.name.localeCompare(b.name, undefined, { numeric: true });
+  }
+
   function sortEntries(list) {
     const sorted = list.slice();
     if (sortMode === "name") {
-      sorted.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+      sorted.sort(cmpNames);
     } else if (sortMode === "files-first") {
       sorted.sort((a, b) => {
         if (a.isDir !== b.isDir) return a.isDir ? 1 : -1;
-        return a.name.localeCompare(b.name, undefined, { numeric: true });
+        return cmpNames(a, b);
       });
     } else {
-      // type-name: folders first, then files A-Z (the original default)
+      // type: folders first, then group by icon kind, then extension, then name
       sorted.sort((a, b) => {
         if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
-        return a.name.localeCompare(b.name, undefined, { numeric: true });
+        const ka = iconFor(a), kb = iconFor(b);
+        if (ka !== kb) return ka.localeCompare(kb);
+        if (a.ext !== b.ext) return a.ext.localeCompare(b.ext);
+        return cmpNames(a, b);
       });
     }
     return sorted;
