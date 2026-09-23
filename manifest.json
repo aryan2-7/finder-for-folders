@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Finder for Folders",
+  "version": "0.1.0",
+  "description": "Makes your browser's file:// folder listing look like macOS Finder.",
+  "content_scripts": [
+    {
+      "matches": ["file:///*"],
+      "js": ["content.js"],
+      "css": ["finder.css"],
+      "run_at": "document_end"
+    }
+  ]
+}
