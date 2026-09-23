@@ -60,7 +60,7 @@
   // Inline SVGs for efficiency (they be in there, swimming and stuff)
   const SVG = {
     folder: `<svg viewBox="0 0 24 24" fill="none"><path d="M3 6.5C3 5.67 3.67 5 4.5 5H9l2 2h8.5c.83 0 1.5.67 1.5 1.5v9c0 .83-.67 1.5-1.5 1.5h-15C3.67 19 3 18.33 3 17.5v-11Z" fill="#5AB1FF"/><path d="M3 6.5C3 5.67 3.67 5 4.5 5H9l2 2h8.5c.83 0 1.5.67 1.5 1.5V9H3V6.5Z" fill="#8FCBFF"/></svg>`,
-    pdf: `<svg viewBox="0 0 24 24" fill="none"><path d="M6 2h8l4 4v16H6V2Z" fill="#FF5F57"/><path d="M14 2v4h4l-4-4Z" fill="#FFAFAA"/><text x="12" y="17" font-size="6" fill="#fff" text-anchor="middle" font-family="Helvetica" font-weight="700">PDF</text></svg>`,
+    pdf: `<svg viewBox="0 0 24 24" fill="none"><path d="M6 2h8l4 4v16H6V2Z" fill="#EE3C36"/><path d="M14 2v4h4l-4-4Z" fill="#FF9B96"/><text x="12" y="17" font-size="6" fill="#fff" text-anchor="middle" font-family="Helvetica" font-weight="700">PDF</text></svg>`,
     image: `<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="16" rx="2" fill="#FFD24C"/><circle cx="8" cy="10" r="2" fill="#fff"/><path d="M4 18l5-5 4 4 3-3 4 4v1a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z" fill="#fff"/></svg>`,
     code: `<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="3" fill="#8E6BFF"/><path d="M9 8 6 12l3 4M15 8l3 4-3 4" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
     archive: `<svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="2" fill="#C9A15A"/><rect x="10.5" y="4" width="3" height="16" fill="#8C6C33"/></svg>`,
@@ -161,7 +161,7 @@
     if (list.length === 0) return;
     let idx = selected ? list.indexOf(selected) : -1;
 
-    const cols = Math.max(1, Math.floor(grid.clientWidth / 100));
+    const cols = Math.max(1, Math.floor(grid.clientWidth / 155));
 
     if (e.key === "ArrowRight") idx = Math.min(list.length - 1, idx + 1);
     else if (e.key === "ArrowLeft") idx = Math.max(0, idx - 1);
