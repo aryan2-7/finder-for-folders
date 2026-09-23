@@ -24,8 +24,9 @@
       if (name === "[parent directory]" || href === "../") return null;
 
       const ext = isDir ? "" : (name.includes(".") ? name.split(".").pop().toLowerCase() : "");
+      const isHidden = name.startsWith(".");
 
-      return { name, href, isDir, ext };
+      return { name, href, isDir, ext, isHidden };
     })
     .filter(Boolean);
 
@@ -108,6 +109,9 @@
   let sortMode = localStorage.getItem("finderSortMode") || "name";
   if (!SORT_MODES[sortMode]) sortMode = "name";
 
+  // hidden files (dotfiles like .DS_Store) stay off by default
+  let showHidden = localStorage.getItem("finderShowHidden") === "true";
+
   function sortEntries(list) {
     const sorted = list.slice();
     if (sortMode === "name") {
@@ -127,7 +131,7 @@
     return sorted;
   }
 
-  // settings menu top right, just a lil dropdown for sort mode
+  // settings menu top right, just a lil dropdown for sort mode and hidden files toggle
   const settingsWrap = document.createElement("div");
   settingsWrap.className = "finder-settings";
 
@@ -149,13 +153,21 @@
   Object.keys(SORT_MODES).forEach((mode) => {
     const item = document.createElement("button");
     item.type = "button";
-    item.className = "finder-settings-item";
+    item.className = "finder-settings-item finder-settings-toggle";
     if (mode === sortMode) item.classList.add("active");
-    item.textContent = SORT_MODES[mode];
+
+    const itemLabel = document.createElement("span");
+    itemLabel.textContent = SORT_MODES[mode];
+    const itemCheck = document.createElement("span");
+    itemCheck.className = "finder-settings-checkmark";
+    itemCheck.textContent = "✓";
+    item.appendChild(itemLabel);
+    item.appendChild(itemCheck);
+
     item.addEventListener("click", () => {
       sortMode = mode;
       localStorage.setItem("finderSortMode", sortMode);
-      // re-mark which item is active, otherwise the highlight doesn't change until you refresh
+      // for the chosen settings to persist
       menu.querySelectorAll(".finder-settings-item").forEach((el) => {
         el.classList.toggle("active", el === item);
       });
@@ -164,6 +176,36 @@
     });
     menu.appendChild(item);
   });
+
+  const hiddenDivider = document.createElement("div");
+  hiddenDivider.className = "finder-settings-divider";
+  menu.appendChild(hiddenDivider);
+
+  const hiddenToggle = document.createElement("button");
+  hiddenToggle.type = "button";
+  hiddenToggle.className = "finder-settings-item finder-settings-toggle";
+  if (showHidden) hiddenToggle.classList.add("active");
+
+  const hiddenToggleLabel = document.createElement("span");
+  hiddenToggleLabel.textContent = "Show hidden files";
+  const hiddenToggleCheck = document.createElement("span");
+  hiddenToggleCheck.className = "finder-settings-checkmark";
+  hiddenToggleCheck.textContent = "\u2713";
+
+  hiddenToggle.appendChild(hiddenToggleLabel);
+  hiddenToggle.appendChild(hiddenToggleCheck);
+
+  function setShowHidden(value) {
+    showHidden = value;
+    localStorage.setItem("finderShowHidden", String(showHidden));
+    hiddenToggle.classList.toggle("active", showHidden);
+    renderGrid();
+  }
+
+  hiddenToggle.addEventListener("click", () => {
+    setShowHidden(!showHidden);
+  });
+  menu.appendChild(hiddenToggle);
 
   const menuDivider = document.createElement("div");
   menuDivider.className = "finder-settings-divider";
@@ -203,14 +245,16 @@
     freshGrid.className = "finder-grid";
     selected = null;
 
-    if (entries.length === 0) {
+    const visible = showHidden ? entries : entries.filter((e) => !e.isHidden);
+
+    if (visible.length === 0) {
       const empty = document.createElement("div");
       empty.className = "finder-empty";
       empty.textContent = "This folder is empty";
       freshGrid.appendChild(empty);
     }
 
-    sortEntries(entries).forEach((entry) => {
+    sortEntries(visible).forEach((entry) => {
       const tile = document.createElement("a");
       tile.className = "finder-tile";
       tile.href = entry.href;
@@ -247,6 +291,14 @@
   }
 
   renderGrid();
+
+  // Cmd(or Ctrl)+Shift+. toggles hidden files
+  document.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.code === "Period" || e.key === "." || e.key === ">")) {
+      e.preventDefault();
+      setShowHidden(!showHidden);
+    }
+  });
 
   // Basic keyboard nav with arrow keys and Enter to move and open
   const tiles = () => Array.from(grid.querySelectorAll(".finder-tile"));

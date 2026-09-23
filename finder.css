@@ -105,7 +105,6 @@ html, body.finder-body {
 }
 
 .finder-settings-item.active {
-  color: #0a84ff;
   font-weight: 600;
 }
 
@@ -122,6 +121,23 @@ html, body.finder-body {
 
 .finder-settings-link:hover {
   color: #fff;
+}
+
+.finder-settings-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.finder-settings-checkmark {
+  color: #e6e6e6;
+  font-size: 12px;
+  visibility: hidden;
+}
+
+.finder-settings-toggle.active .finder-settings-checkmark {
+  visibility: visible;
 }
 
 .finder-grid {
