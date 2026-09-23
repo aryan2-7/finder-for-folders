@@ -99,60 +99,154 @@
     crumbs.appendChild(link);
   });
 
-  bar.appendChild(crumbs);
-  document.body.appendChild(bar);
+  // sort menu, stashed in localStorage so it sticks across folders
+  const SORT_MODES = {
+    "name": "Name",
+    "type-name": "Type",
+    "files-first": "Files first",
+  };
+  let sortMode = localStorage.getItem("finderSortMode") || "name";
+  if (!SORT_MODES[sortMode]) sortMode = "name";
 
-  const grid = document.createElement("div");
-  grid.className = "finder-grid";
-
-  if (entries.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "finder-empty";
-    empty.textContent = "This folder is empty";
-    grid.appendChild(empty);
+  function sortEntries(list) {
+    const sorted = list.slice();
+    if (sortMode === "name") {
+      sorted.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    } else if (sortMode === "files-first") {
+      sorted.sort((a, b) => {
+        if (a.isDir !== b.isDir) return a.isDir ? 1 : -1;
+        return a.name.localeCompare(b.name, undefined, { numeric: true });
+      });
+    } else {
+      // type-name: folders first, then files A-Z (the original default)
+      sorted.sort((a, b) => {
+        if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+        return a.name.localeCompare(b.name, undefined, { numeric: true });
+      });
+    }
+    return sorted;
   }
 
-  // sort folders first, then files A-Z
-  entries.sort((a, b) => {
-    if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
-    return a.name.localeCompare(b.name, undefined, { numeric: true });
+  // settings menu top right, just a lil dropdown for sort mode
+  const settingsWrap = document.createElement("div");
+  settingsWrap.className = "finder-settings";
+
+  const settingsBtn = document.createElement("button");
+  settingsBtn.className = "finder-settings-btn";
+  settingsBtn.type = "button";
+  settingsBtn.textContent = "\u2699"; // gear icon
+  settingsBtn.setAttribute("aria-label", "Sort settings");
+
+  const menu = document.createElement("div");
+  menu.className = "finder-settings-menu";
+  menu.hidden = true;
+
+  const menuHeading = document.createElement("div");
+  menuHeading.className = "finder-settings-heading";
+  menuHeading.textContent = "Sort by";
+  menu.appendChild(menuHeading);
+
+  Object.keys(SORT_MODES).forEach((mode) => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "finder-settings-item";
+    if (mode === sortMode) item.classList.add("active");
+    item.textContent = SORT_MODES[mode];
+    item.addEventListener("click", () => {
+      sortMode = mode;
+      localStorage.setItem("finderSortMode", sortMode);
+      // re-mark which item is active, otherwise the highlight doesn't change until you refresh
+      menu.querySelectorAll(".finder-settings-item").forEach((el) => {
+        el.classList.toggle("active", el === item);
+      });
+      menu.hidden = true;
+      renderGrid();
+    });
+    menu.appendChild(item);
   });
+
+  const menuDivider = document.createElement("div");
+  menuDivider.className = "finder-settings-divider";
+  menu.appendChild(menuDivider);
+
+  const repoLink = document.createElement("a");
+  repoLink.className = "finder-settings-item finder-settings-link";
+  repoLink.href = "https://github.com/aryan2-7/finder-for-folders";
+  repoLink.target = "_blank";
+  repoLink.rel = "noopener noreferrer";
+  repoLink.textContent = "View on GitHub \u2197";
+  menu.appendChild(repoLink);
+
+  settingsBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    menu.hidden = !menu.hidden;
+  });
+  document.addEventListener("click", () => {
+    menu.hidden = true;
+  });
+
+  settingsWrap.appendChild(settingsBtn);
+  settingsWrap.appendChild(menu);
+  bar.appendChild(crumbs);
+  bar.appendChild(settingsWrap);
+  document.body.appendChild(bar);
+
+  let grid = document.createElement("div");
+  grid.className = "finder-grid";
+  document.body.appendChild(grid);
 
   let selected = null;
 
-  entries.forEach((entry) => {
-    const tile = document.createElement("a");
-    tile.className = "finder-tile";
-    tile.href = entry.href;
+  // builds the tile grid using the current sortMode
+  function renderGrid() {
+    const freshGrid = document.createElement("div");
+    freshGrid.className = "finder-grid";
+    selected = null;
 
-    const iconWrap = document.createElement("div");
-    iconWrap.className = "finder-icon";
-    iconWrap.innerHTML = SVG[iconFor(entry)];
+    if (entries.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "finder-empty";
+      empty.textContent = "This folder is empty";
+      freshGrid.appendChild(empty);
+    }
 
-    const label = document.createElement("div");
-    label.className = "finder-label";
-    label.textContent = entry.name;
+    sortEntries(entries).forEach((entry) => {
+      const tile = document.createElement("a");
+      tile.className = "finder-tile";
+      tile.href = entry.href;
 
-    tile.appendChild(iconWrap);
-    tile.appendChild(label);
+      const iconWrap = document.createElement("div");
+      iconWrap.className = "finder-icon";
+      iconWrap.innerHTML = SVG[iconFor(entry)];
 
-    // Single click only selects, double click opens
-    tile.addEventListener("click", (e) => {
-      e.preventDefault();
-      if (selected) selected.classList.remove("selected");
-      tile.classList.add("selected");
-      selected = tile;
+      const label = document.createElement("div");
+      label.className = "finder-label";
+      label.textContent = entry.name;
+
+      tile.appendChild(iconWrap);
+      tile.appendChild(label);
+
+      // Single click only selects, double click opens
+      tile.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (selected) selected.classList.remove("selected");
+        tile.classList.add("selected");
+        selected = tile;
+      });
+
+      tile.addEventListener("dblclick", (e) => {
+        e.preventDefault();
+        window.location.href = tile.href;
+      });
+
+      freshGrid.appendChild(tile);
     });
 
-    tile.addEventListener("dblclick", (e) => {
-      e.preventDefault();
-      window.location.href = tile.href;
-    });
+    grid.replaceWith(freshGrid);
+    grid = freshGrid;
+  }
 
-    grid.appendChild(tile);
-  });
-
-  document.body.appendChild(grid);
+  renderGrid();
 
   // Basic keyboard nav with arrow keys and Enter to move and open
   const tiles = () => Array.from(grid.querySelectorAll(".finder-tile"));
