@@ -8,7 +8,43 @@
     return;
   }
 
-  // pull name/href/isDir out of the table links
+  // pull name/href/isDir/size out of the table links
+  function sizeTextFromRow(a) {
+    const tr = a.closest ? a.closest("tr") : null;
+    if (!tr || !tr.querySelectorAll) return "";
+    const cells = Array.from(tr.querySelectorAll("td"));
+    const nameIdx = cells.findIndex((td) => td.contains && td.contains(a));
+    const after = nameIdx >= 0 ? cells.slice(nameIdx + 1) : cells;
+    for (const td of after) {
+      const t = (td.textContent || "").trim();
+      if (t === "-") return t;
+      if (/^\d{4}$/.test(t)) continue; // lone year from a split date column, not a size
+      if (/^[\d.,]+\s*([kmgtpe]?i?b?|bytes?)$/i.test(t)) return t;
+    }
+    return "";
+  }
+
+  // "1.2K" / "12 KB" / "3.4 GiB" -> bytes (1024-based, like the listings); "-" -> null
+  function parseSizeBytes(text) {
+    const t = (text || "").trim();
+    if (!t || t === "-" || t === "~") return null;
+    const m = t.match(/^([\d.,]+)\s*([kmgtpe]?)(i?[bB]|bytes?)?$/i);
+    if (!m) return null;
+    const num = parseFloat(m[1].replace(/,/g, ""));
+    if (isNaN(num)) return null;
+    const pow = { "": 0, k: 1, m: 2, g: 3, t: 4, p: 5, e: 6 }[(m[2] || "").toLowerCase()];
+    if (pow === undefined) return null;
+    return Math.round(num * Math.pow(1024, pow));
+  }
+
+  function formatBytes(n) {
+    if (n < 1024) return `${n} B`;
+    const units = ["KB", "MB", "GB", "TB", "PB"];
+    let v = n, u = -1;
+    do { v /= 1024; u++; } while (v >= 1024 && u < units.length - 1);
+    return `${v >= 100 ? Math.round(v) : Math.round(v * 10) / 10} ${units[u]}`;
+  }
+
   const anchors = Array.from(table.querySelectorAll("a[href]"));
 
   const entries = anchors
@@ -25,8 +61,9 @@
 
       const ext = isDir ? "" : (name.includes(".") ? name.split(".").pop().toLowerCase() : "");
       const isHidden = name.startsWith(".");
+      const sizeText = sizeTextFromRow(a);
 
-      return { name, href, isDir, ext, isHidden };
+      return { name, href, isDir, ext, isHidden, sizeText, sizeBytes: parseSizeBytes(sizeText) };
     })
     .filter(Boolean);
 
@@ -115,6 +152,11 @@
 
   // hidden files (dotfiles like .DS_Store) stay off by default
   let showHidden = localStorage.getItem("finderShowHidden") === "true";
+
+  // icons vs list layout, sticky across folders like the other settings
+  const VIEW_MODES = { icons: "Icons", list: "List" };
+  let viewMode = localStorage.getItem("finderViewMode") || "icons";
+  if (!VIEW_MODES[viewMode]) viewMode = "icons";
 
   // case-insensitive name compare (with a case-sensitive tiebreak so order is stable)
   function cmpNames(a, b) {
@@ -286,15 +328,149 @@
 
   settingsWrap.appendChild(settingsBtn);
   settingsWrap.appendChild(menu);
-  bar.appendChild(crumbs);
-  bar.appendChild(settingsWrap);
-  document.body.appendChild(bar);
 
   let grid = document.createElement("div");
   grid.className = "finder-grid";
-  document.body.appendChild(grid);
 
-  let selected = null;
+  // status bar, fixed to the viewport bottom: item/selection count on the left
+  const statusBar = document.createElement("div");
+  statusBar.className = "finder-statusbar";
+
+  const statusCount = document.createElement("div");
+  statusCount.className = "finder-statusbar-count";
+
+  const statusFolder = document.createElement("div");
+  statusFolder.className = "finder-statusbar-folder";
+  const folderName = segments.length ? segments[segments.length - 1] : "/";
+  statusFolder.textContent = folderName;
+
+  const statusSize = document.createElement("div");
+  statusSize.className = "finder-statusbar-size";
+
+  statusBar.appendChild(statusCount);
+  statusBar.appendChild(statusFolder);
+  statusBar.appendChild(statusSize);
+  // attached to the body after the titlebar below
+
+  function updateStatusBar() {
+    const list = tiles();
+    const total = list.length;
+    const n = selected.size;
+    statusCount.textContent = n > 0
+      ? `${total} item${total === 1 ? "" : "s"}, ${n} selected`
+      : `${total} item${total === 1 ? "" : "s"}`;
+
+    // center: a single selection shows that file's name, otherwise the folder name
+    let centerName = folderName;
+    if (n === 1) {
+      const only = Array.from(selected)[0];
+      const single = currentVisible[parseInt(only.dataset.entryIndex, 10)];
+      if (single) centerName = single.name;
+    }
+    statusFolder.textContent = centerName;
+    statusFolder.title = centerName;
+
+    // right side: summed size of the selection
+    const pool = n > 0 ? Array.from(selected) : list;
+    let bytes = 0;
+    let known = false;
+    pool.forEach((tile) => {
+      const entry = currentVisible[parseInt(tile.dataset.entryIndex, 10)];
+      if (entry && entry.sizeBytes !== null && entry.sizeBytes !== undefined) {
+        bytes += entry.sizeBytes;
+        known = true;
+      }
+    });
+    statusSize.textContent = !known ? (n > 0 ? "—" : "") : (n > 0 ? formatBytes(bytes) : `${formatBytes(bytes)} total`);
+  }
+
+  // multi-select: a Set of tiles. Cmd/Ctrl+click toggles one, Shift+click selects all from the last-clicked tile
+  let selected = new Set();
+  let lastClickedTile = null;
+  // sorted entries backing the current grid, parallel to tiles() order so the status bar can map a selected tile back to its size
+  let currentVisible = [];
+
+  function clearSelection() {
+    selected.forEach((t) => t.classList.remove("selected"));
+    selected.clear();
+  }
+
+  function selectOnly(tile) {
+    clearSelection();
+    selected.add(tile);
+    tile.classList.add("selected");
+    lastClickedTile = tile;
+  }
+
+  function toggleSelection(tile) {
+    if (selected.has(tile)) {
+      selected.delete(tile);
+      tile.classList.remove("selected");
+    } else {
+      selected.add(tile);
+      tile.classList.add("selected");
+    }
+    lastClickedTile = tile;
+  }
+
+  function selectRange(tile) {
+    const list = tiles();
+    const anchorIdx = lastClickedTile ? list.indexOf(lastClickedTile) : 0;
+    const targetIdx = list.indexOf(tile);
+    if (anchorIdx === -1 || targetIdx === -1) {
+      selectOnly(tile);
+      return;
+    }
+    clearSelection();
+    const [start, end] = anchorIdx < targetIdx ? [anchorIdx, targetIdx] : [targetIdx, anchorIdx];
+    for (let i = start; i <= end; i++) {
+      selected.add(list[i]);
+      list[i].classList.add("selected");
+    }
+  }
+
+  const tiles = () => Array.from(grid.querySelectorAll(".finder-tile"));
+
+  // view mode toolbar: icons/list segmented control, Finder-style
+  const toolbar = document.createElement("div");
+  toolbar.className = "finder-toolbar";
+
+  const iconsBtn = document.createElement("button");
+  iconsBtn.type = "button";
+  iconsBtn.className = "finder-toolbar-btn";
+  iconsBtn.title = "Icons (⌘ 1)";
+  iconsBtn.setAttribute("aria-label", "Icon view");
+  iconsBtn.innerHTML = `<svg viewBox="0 0 16 16" width="15" height="15"><rect x="1" y="1" width="6" height="6" rx="1" fill="currentColor"/><rect x="9" y="1" width="6" height="6" rx="1" fill="currentColor"/><rect x="1" y="9" width="6" height="6" rx="1" fill="currentColor"/><rect x="9" y="9" width="6" height="6" rx="1" fill="currentColor"/></svg>`;
+
+  const listBtn = document.createElement("button");
+  listBtn.type = "button";
+  listBtn.className = "finder-toolbar-btn";
+  listBtn.title = "List (⌘ 2)";
+  listBtn.setAttribute("aria-label", "List view");
+  listBtn.innerHTML = `<svg viewBox="0 0 16 16" width="15" height="15"><rect x="1" y="2" width="14" height="2.2" rx="1" fill="currentColor"/><rect x="1" y="6.9" width="14" height="2.2" rx="1" fill="currentColor"/><rect x="1" y="11.8" width="14" height="2.2" rx="1" fill="currentColor"/></svg>`;
+
+  function setViewMode(mode) {
+    viewMode = mode;
+    localStorage.setItem("finderViewMode", viewMode);
+    iconsBtn.classList.toggle("active", viewMode === "icons");
+    listBtn.classList.toggle("active", viewMode === "list");
+    renderGrid();
+  }
+
+  iconsBtn.classList.toggle("active", viewMode === "icons");
+  listBtn.classList.toggle("active", viewMode === "list");
+  iconsBtn.addEventListener("click", () => setViewMode("icons"));
+  listBtn.addEventListener("click", () => setViewMode("list"));
+
+  toolbar.appendChild(iconsBtn);
+  toolbar.appendChild(listBtn);
+
+  bar.appendChild(crumbs);
+  bar.appendChild(toolbar);
+  bar.appendChild(settingsWrap);
+  document.body.appendChild(bar);
+  document.body.appendChild(grid);
+  document.body.appendChild(statusBar);
 
   // Background-tab, the scripts can't use chrome.tabs, new window or opens in same tab, so we use background.js after chrome.tabs.create(active:false)
   function openInBackgroundTab(href) {
@@ -382,11 +558,12 @@
     if (e.key === "Escape") closeCtxMenu();
   });
 
-  // builds the tile grid using the current sortMode
+  // builds the tile grid using the current sortMode and viewMode
   function renderGrid() {
     const freshGrid = document.createElement("div");
-    freshGrid.className = "finder-grid";
-    selected = null;
+    freshGrid.className = viewMode === "list" ? "finder-grid finder-grid-list" : "finder-grid";
+    selected = new Set();
+    lastClickedTile = null;
 
     const visible = showHidden ? entries : entries.filter((e) => !e.isHidden);
 
@@ -397,10 +574,24 @@
       freshGrid.appendChild(empty);
     }
 
-    sortEntries(visible).forEach((entry) => {
+    if (viewMode === "list" && visible.length > 0) {
+      const header = document.createElement("div");
+      header.className = "finder-list-header";
+      header.innerHTML = `
+        <span class="finder-list-col-name">Name</span>
+        <span class="finder-list-col-kind">Kind</span>
+      `;
+      freshGrid.appendChild(header);
+    }
+
+    const sorted = sortEntries(visible);
+    currentVisible = sorted;
+
+    sorted.forEach((entry, idx) => {
       const tile = document.createElement("a");
-      tile.className = "finder-tile";
+      tile.className = viewMode === "list" ? "finder-tile finder-row" : "finder-tile";
       tile.href = entry.href;
+      tile.dataset.entryIndex = String(idx);
 
       const iconWrap = document.createElement("div");
       iconWrap.className = "finder-icon";
@@ -410,36 +601,57 @@
       label.className = "finder-label";
       label.textContent = entry.name;
 
-      tile.appendChild(iconWrap);
-      tile.appendChild(label);
+      if (viewMode === "list") {
+        // name column holds icon + label together so it lines up with the header
+        const nameCol = document.createElement("div");
+        nameCol.className = "finder-row-name";
+        nameCol.appendChild(iconWrap);
+        nameCol.appendChild(label);
+        tile.appendChild(nameCol);
 
-      // Single click selects; Cmd/Ctrl+click opens in a background tab
+        const kind = document.createElement("div");
+        kind.className = "finder-row-kind";
+        kind.textContent = entry.isDir ? "Folder" : (entry.ext ? entry.ext.toUpperCase() + " File" : "File");
+        tile.appendChild(kind);
+      } else {
+        tile.appendChild(iconWrap);
+        tile.appendChild(label);
+      }
+
+      // Plain click selects only; Cmd/Ctrl+click toggles multi-select;
+      // Shift+click selects a range. Middle-click opens in a background tab.
       tile.addEventListener("click", (e) => {
         e.preventDefault();
-        if (selected) selected.classList.remove("selected");
-        tile.classList.add("selected");
-        selected = tile;
-        if (e.ctrlKey || e.metaKey) {
+        if (e.shiftKey) {
+          selectRange(tile);
+        } else if (e.metaKey || e.ctrlKey) {
+          toggleSelection(tile);
+        } else {
+          selectOnly(tile);
+        }
+        updateStatusBar();
+      });
+
+      tile.addEventListener("auxclick", (e) => {
+        // middle-click (button 1) opens in a background tab
+        if (e.button === 1) {
+          e.preventDefault();
           openInBackgroundTab(tile.href);
         }
       });
 
       tile.addEventListener("dblclick", (e) => {
         e.preventDefault();
-        // Shift+double-click opens in a background tab, same as Shift+Enter
-        if (e.shiftKey) {
-          openInBackgroundTab(tile.href);
-        } else {
-          window.location.href = tile.href;
-        }
+        window.location.href = tile.href;
       });
 
       // right-click selects the tile too, feels more native than leaving selection untouched
       tile.addEventListener("contextmenu", (e) => {
         e.preventDefault();
-        if (selected) selected.classList.remove("selected");
-        tile.classList.add("selected");
-        selected = tile;
+        if (!selected.has(tile)) {
+          selectOnly(tile);
+          updateStatusBar();
+        }
         openCtxMenu(tile, e.clientX, e.clientY);
       });
 
@@ -448,6 +660,7 @@
 
     grid.replaceWith(freshGrid);
     grid = freshGrid;
+    updateStatusBar();
   }
 
   renderGrid();
@@ -460,41 +673,64 @@
     }
   });
 
+  // Cmd/Ctrl+A selects all (multi-select).
+  document.addEventListener("keydown", (e) => {
+    if (!(e.metaKey || e.ctrlKey)) return;
+    if (e.key === "a") {
+      e.preventDefault();
+      const list = tiles();
+      selected = new Set(list);
+      list.forEach((t) => t.classList.add("selected"));
+      lastClickedTile = list[list.length - 1] || null;
+      updateStatusBar();
+    }
+  });
+
   // Basic keyboard nav with arrow keys and Enter to move and open
-  const tiles = () => Array.from(grid.querySelectorAll(".finder-tile"));
   document.addEventListener("keydown", (e) => {
     // Cmd/Ctrl+Left/Right is browser back/forward, don't override
     if ((e.metaKey || e.ctrlKey) && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
       return;
     }
+    // let the Cmd/Ctrl combos above (view mode, select-all) handle themselves
+    if (e.metaKey || e.ctrlKey) {
+      if (e.key === "Enter" && lastClickedTile) {
+        e.preventDefault();
+        openInBackgroundTab(lastClickedTile.href);
+      }
+      return;
+    }
 
     const list = tiles();
     if (list.length === 0) return;
-    let idx = selected ? list.indexOf(selected) : -1;
+    const current = lastClickedTile && list.includes(lastClickedTile) ? lastClickedTile : null;
+    let idx = current ? list.indexOf(current) : -1;
 
-    // column count has to follow the icon size, otherwise Up/Down jumps wrong
-    const cols = Math.max(1, Math.floor(grid.clientWidth / (iconSize + 30)));
+    // list view is always a single column
+    const cols = viewMode === "list" ? 1 : Math.max(1, Math.floor(grid.clientWidth / (iconSize + 30)));
 
-    if (e.key === "ArrowRight") idx = Math.min(list.length - 1, idx + 1);
-    else if (e.key === "ArrowLeft") idx = Math.max(0, idx - 1);
+    if (e.key === "ArrowRight" && viewMode !== "list") idx = Math.min(list.length - 1, idx + 1);
+    else if (e.key === "ArrowLeft" && viewMode !== "list") idx = Math.max(0, idx - 1);
     else if (e.key === "ArrowDown") idx = Math.min(list.length - 1, idx + cols);
     else if (e.key === "ArrowUp") idx = Math.max(0, idx - cols);
-    else if (e.key === "Enter" && selected) {
-      // Shift+Enter opens in a background tab, plain Enter navigates in place
-      if (e.shiftKey) {
-        openInBackgroundTab(selected.href);
-      } else {
-        window.location.href = selected.href;
-      }
+    else if (e.key === "Enter" && current) {
+      window.location.href = current.href;
       return;
     } else {
       return;
     }
 
     e.preventDefault();
-    if (selected) selected.classList.remove("selected");
-    selected = list[idx];
-    selected.classList.add("selected");
-    selected.scrollIntoView({ block: "nearest" });
+    selectOnly(list[idx]);
+    updateStatusBar();
+    list[idx].scrollIntoView({ block: "nearest" });
+  });
+
+  // click on empty grid area clears selection, like real Finder
+  document.body.addEventListener("click", (e) => {
+    if (e.target === grid || e.target.classList.contains("finder-empty")) {
+      clearSelection();
+      updateStatusBar();
+    }
   });
 })();
