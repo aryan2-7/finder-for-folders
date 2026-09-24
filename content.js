@@ -327,6 +327,61 @@
     a.remove();
   }
 
+  // right-click context menu — "Open", "Open in new tab", "Copy link", built fresh per tile
+  const ctxMenu = document.createElement("div");
+  ctxMenu.className = "finder-context-menu";
+  ctxMenu.hidden = true;
+  document.body.appendChild(ctxMenu);
+
+  function closeCtxMenu() {
+    ctxMenu.hidden = true;
+  }
+
+  function addCtxItem(label, onClick) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "finder-settings-item";
+    item.textContent = label;
+    item.addEventListener("click", () => {
+      closeCtxMenu();
+      onClick();
+    });
+    ctxMenu.appendChild(item);
+    return item;
+  }
+
+  function openCtxMenu(tile, x, y) {
+    ctxMenu.innerHTML = "";
+
+    addCtxItem("Open", () => {
+      window.location.href = tile.href;
+    });
+    addCtxItem("Open in new tab", () => {
+      openInBackgroundTab(tile.href);
+    });
+    addCtxItem("Copy link", () => {
+      const url = new URL(tile.href, location.href).href;
+      navigator.clipboard.writeText(url).catch(() => {
+        // clipboard API needs a secure context/permission, silently ignore if it's blocked
+      });
+    });
+
+    ctxMenu.hidden = false;
+
+    // keep it on-screen, same clamp idea as a native right-click menu
+    const menuRect = ctxMenu.getBoundingClientRect();
+    const maxX = window.innerWidth - menuRect.width - 4;
+    const maxY = window.innerHeight - menuRect.height - 4;
+    ctxMenu.style.left = Math.min(x, maxX) + "px";
+    ctxMenu.style.top = Math.min(y, maxY) + "px";
+  }
+
+  document.addEventListener("click", closeCtxMenu);
+  document.addEventListener("scroll", closeCtxMenu, true);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeCtxMenu();
+  });
+
   // builds the tile grid using the current sortMode
   function renderGrid() {
     const freshGrid = document.createElement("div");
@@ -377,6 +432,15 @@
         } else {
           window.location.href = tile.href;
         }
+      });
+
+      // right-click selects the tile too, feels more native than leaving selection untouched
+      tile.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        if (selected) selected.classList.remove("selected");
+        tile.classList.add("selected");
+        selected = tile;
+        openCtxMenu(tile, e.clientX, e.clientY);
       });
 
       freshGrid.appendChild(tile);
