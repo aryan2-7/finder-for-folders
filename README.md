@@ -1,4 +1,4 @@
-# Finder for Folders v0.1.0
+# Finder for Folders v0.1.1
 
 Makes your browser's `file://` folder listing look and behave like a macOS Finder window
 
@@ -10,7 +10,9 @@ Makes your browser's `file://` folder listing look and behave like a macOS Finde
 - Settings menu (gear, top right):
   - Sort by: `Name / Type (folders first) / Files first` stored in `localStorage`
   - Show hidden files toggle (dotfiles like `.DS_Store`)
+  - Icon size slider (`48–256`, stored in `localStorage`)
 - Single click to select, double click to open (has no real purpose right now but will be used for status bar later)
+- Open in background tab (stay in the folder tab): `Shift+Enter`, `Shift+double-click`, `Cmd+click` (Mac) / `Ctrl+click` (Windows/Linux)
 - Keyboard navigation: Arrow keys to move, `Enter` to open
 - Hidden-file shortcut: `Cmd+Shift+.` (Mac) / `Ctrl+Shift+.` (Windows/Linux)
 - Empty-folder state
@@ -23,6 +25,8 @@ Makes your browser's `file://` folder listing look and behave like a macOS Finde
 | Toggle hidden files | `Cmd+Shift+.` | `Ctrl+Shift+.` |
 | Move selection | Arrow keys | Arrow keys |
 | Open selected | `Enter` | `Enter` |
+| Open in new background tab (keyboard) | `Shift+Enter` | `Shift+Enter` |
+| Open in new background tab (mouse) | `Shift+double-click` or `Cmd+click` | `Shift+double-click` or `Ctrl+click` |
 
 ## Install (unpacked)
 1. Clone this repo
@@ -61,11 +65,13 @@ Makes your browser's `file://` folder listing look and behave like a macOS Finde
 2. Runs on the page if it looks like Chrome's auto-generated listing (`document.title` starts with `Index of` + a `<table>` exists)
 3. Parses `<a href>` rows into `{ name, href, isDir, ext, isHidden }`, skipping the parent-directory row
 4. Wipes `<body>` and renders the Finder UI (title bar + grid)
+5. Background-tab opens (`Shift+Enter`, `Shift+double-click`, `Cmd/Ctrl+click`) go through `background.js` via `chrome.tabs.create({ active: false })`, so the folder tab stays focused
 
 ## Permissions & privacy
 
 - Host access: `file:///*` only
-- Storage: `localStorage` only (`finderSortMode`, `finderShowHidden`)
+- Storage: `localStorage` only (`finderSortMode`, `finderShowHidden`, `finderIconSize`)
+- Tabs: background worker opens background tabs next to the folder tab (`chrome.tabs.create` with `active: false`)
 
 ## Known limitations (v0.1)
 
@@ -80,6 +86,7 @@ Makes your browser's `file://` folder listing look and behave like a macOS Finde
 ```
 manifest.json  # MV3 manifest, version 0.1.0
 content.js     # parsing + rendering + interactions
+background.js  # opens background tabs via chrome.tabs.create
 finder.css     # Finder dark theme
 LICENSE        # MIT
 README.md      # this file
