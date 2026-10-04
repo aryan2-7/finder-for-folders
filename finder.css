@@ -300,30 +300,28 @@ html, body.finder-body {
   overflow: hidden;
 }
 
-/* PDF previews: first page only, scrollbars hidden. The viewer can't scroll
-   (pointer-events are off above) — the embed just runs 14px wider than this
-   overflow-hidden wrapper so any scrollbar Chrome still renders is clipped */
+/* PDF previews: rendered to canvas via pdf.js to match macOS Finder icon previews.
+   Exact page aspect ratio (no letterbox or gray bars), centered in the icon tile with
+   macOS document paper drop shadow and subtle border. */
 .finder-thumb-pdf {
-  overflow: hidden;
-  background: #525659;
-  /* Finder-style front-page crop: a landscape 16:10 box, full width and
-     centered vertically — the page fits its width, everything below clips
-     away instead of showing the whole tall page */
-  width: auto;
-  height: auto;
-  left: 0;
-  right: 0;
+  inset: auto;
   top: 50%;
-  bottom: auto;
-  transform: translateY(-50%);
-  aspect-ratio: 16 / 10;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  background: #ffffff;
+  border-radius: 3px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45), 0 0 0 0.5px rgba(255, 255, 255, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.2);
 }
 
 .finder-thumb-pdf canvas,
 .finder-thumb-pdf img {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
+  background: #ffffff;
 }
 
 .finder-label {

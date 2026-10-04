@@ -1041,15 +1041,31 @@
             doc.destroy();
             return;
           }
-          const scale = (iconSize * 2) / page.getViewport({ scale: 1 }).width;
+          const unscaled = page.getViewport({ scale: 1 });
+          const maxDim = Math.max(iconSize, 128) * 2;
+          const scale = Math.min(maxDim / unscaled.width, maxDim / unscaled.height);
           const viewport = page.getViewport({ scale });
           el.width = Math.max(1, Math.floor(viewport.width));
           el.height = Math.max(1, Math.floor(viewport.height));
-          page.render({ canvasContext: el.getContext("2d"), viewport }).promise.then(() => {
+
+          const isLandscape = unscaled.width >= unscaled.height;
+          wrap.style.width = isLandscape ? "100%" : "auto";
+          wrap.style.height = isLandscape ? "auto" : "100%";
+          wrap.style.aspectRatio = `${unscaled.width} / ${unscaled.height}`;
+
+          const ctx = el.getContext("2d");
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, el.width, el.height);
+
+          page.render({ canvasContext: ctx, viewport }).promise.then(() => {
             doc.destroy();
             if (!el.isConnected) return;
             try {
-              pdfImageCache.set(target, el.toDataURL("image/png"));
+              pdfImageCache.set(target, {
+                src: el.toDataURL("image/png"),
+                width: unscaled.width,
+                height: unscaled.height
+              });
             } catch (e) {
               // canvas not cacheable — show it anyway, just don't cache
             }
@@ -1203,13 +1219,21 @@
         // re-renders reuse them instead of re-parsing.
         const fileUrl = new URL(entry.href, location.href).href;
         if (pdfImageCache.has(fileUrl)) {
+          const cached = pdfImageCache.get(fileUrl);
           const wrap = document.createElement("div");
           wrap.className = "finder-thumb finder-thumb-pdf";
           wrap.setAttribute("aria-hidden", "true");
           const img = document.createElement("img");
           img.decoding = "async";
           img.alt = "";
-          img.src = pdfImageCache.get(fileUrl);
+          const src = (cached && typeof cached === "object") ? cached.src : cached;
+          if (cached && typeof cached === "object" && cached.width && cached.height) {
+            const isLandscape = cached.width >= cached.height;
+            wrap.style.width = isLandscape ? "100%" : "auto";
+            wrap.style.height = isLandscape ? "auto" : "100%";
+            wrap.style.aspectRatio = `${cached.width} / ${cached.height}`;
+          }
+          img.src = src;
           img.setAttribute("aria-hidden", "true");
           img.addEventListener("load", () => {
             wrap.classList.add("loaded");
