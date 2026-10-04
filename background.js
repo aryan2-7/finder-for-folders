@@ -1,12 +1,5 @@
-// Background worker: open links in a background tab (stay in the folder tab).
-// Content scripts can't call chrome.tabs directly, and window.open() /
-// anchor target=_blank from a file:// page either pop a new window or steal
-// focus — so the content script messages us and we use tabs.create(active:false).
-
-// Text previews: content scripts can't fetch() file:// URLs, but the worker
-// can (same file:// host permission + "Allow access to file URLs"). Reads
-// only the first maxBytes then cancels, so even huge logs cost nothing.
-// NUL byte = binary (mislabeled file), reported as failure so the icon stays.
+// Worker opens background tabs and fetches file:// bytes for previews.
+// Content scripts cannot call chrome.tabs or fetch file:// URLs directly.
 async function fetchHeadBytes(url, maxBytes) {
   const res = await fetch(url);
   if (!res.ok || !res.body) throw new Error("bad response");
@@ -36,7 +29,6 @@ async function fetchHeadBytes(url, maxBytes) {
   try {
     await reader.cancel();
   } catch (e) {
-    // already closed, nothing to cancel
   }
   const buf = new Uint8Array(total);
   let off = 0;
@@ -53,9 +45,7 @@ async function fetchTextHead(url, maxBytes) {
   return { text: new TextDecoder("utf-8", { fatal: false }).decode(buf), truncated };
 }
 
-// empty/corrupt PDFs make Chrome's viewer render a "Failed to load PDF
-// document" error bar inside the thumbnail — check the magic bytes first
-// so those files just keep their icon
+// Reject non-PDF bytes so empty or corrupt files keep their icon.
 function looksLikePdf(buf) {
   if (buf.length < 5) return false;
   const head = new TextDecoder("latin1").decode(buf.slice(0, 1024));
@@ -87,7 +77,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       (r) => sendResponse({ ok: true, text: r.text, truncated: r.truncated }),
       () => sendResponse({ ok: false })
     );
-    return true; // async response
+    return true;
   }
 
   if (message.type === "finder-check-pdf") {
@@ -99,7 +89,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       (r) => sendResponse({ ok: true, valid: looksLikePdf(r.buf) }),
       () => sendResponse({ ok: false })
     );
-    return true; // async response
+    return true;
   }
 
   if (message.type === "finder-fetch-pdf") {
@@ -107,22 +97,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ ok: false });
       return;
     }
-    // whole file (bounded) — pdf.js parses from these bytes directly.
-    // Base64-encoded because Chrome extension message passing serializes
-    // messages with JSON, which converts typed arrays into plain objects
-    // without length and strips TypedArray methods.
+    // Base64 is used because extension messages serialize through JSON.
     fetchHeadBytes(message.url, 15 * 1024 * 1024).then(
       (r) => sendResponse({ ok: true, base64: uint8ToBase64(r.buf), truncated: r.truncated }),
       () => sendResponse({ ok: false })
     );
-    return true; // async response
+    return true;
   }
 
-  if (message.type !== "finder-open-background-tab") return;
+  if (message.type !== "finder-open-background-tab" && message.type !== "finder-open-background-tabs") return;
+  if (message.type === "finder-open-background-tabs") {
+    if (!Array.isArray(message.urls)) return;
+    const urls = message.urls.filter((u) => typeof u === "string");
+    if (urls.length === 0) return;
+    const baseIndex = sender.tab && typeof sender.tab.index === "number" ? sender.tab.index + 1 : undefined;
+    urls.forEach((url, i) => {
+      const props = { url, active: false };
+      if (baseIndex !== undefined) props.index = baseIndex + i;
+      chrome.tabs.create(props);
+    });
+    return;
+  }
   if (typeof message.url !== "string") return;
 
   const createProps = { url: message.url, active: false };
-  // open right next to the folder tab when we know where it is
   if (sender.tab && typeof sender.tab.index === "number") {
     createProps.index = sender.tab.index + 1;
   }

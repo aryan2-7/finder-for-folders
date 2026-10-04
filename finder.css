@@ -25,7 +25,7 @@ html, body.finder-body {
 
 .finder-breadcrumb {
   flex: 1 1 auto;
-  min-width: 0; /* let long paths shrink/scroll instead of pushing toolbar + settings out */
+  min-width: 0;
   font-size: 13px;
   color: #b7b7b7;
   white-space: nowrap;
@@ -47,7 +47,6 @@ html, body.finder-body {
   padding: 0 2px;
 }
 
-/* quick filter in the titlebar, shrinks on narrow windows instead of pushing stuff out */
 .finder-search {
   flex: 0 1 200px;
   min-width: 120px;
@@ -81,7 +80,6 @@ html, body.finder-body {
   cursor: pointer;
 }
 
-/* sort settings dropdown, top right of the titlebar */
 .finder-settings {
   position: relative;
   flex-shrink: 0;
@@ -153,7 +151,6 @@ html, body.finder-body {
   background: #3d3d3d;
 }
 
-/* icon size slider row */
 .finder-settings-slider-row {
   padding: 6px 8px 8px;
 }
@@ -194,7 +191,6 @@ html, body.finder-body {
   visibility: visible;
 }
 
-/* --icon-size drives tile/grid scale too, set via the settings slider (defaults to 125px) */
 .finder-body {
   --icon-size: 125px;
   --list-icon-size: 28px;
@@ -204,7 +200,7 @@ html, body.finder-body {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(calc(var(--icon-size) + 22px), 1fr));
   gap: 18px 8px;
-  padding: 64px 20px 44px; /* top clears the fixed titlebar, bottom clears the fixed status bar */
+  padding: 64px 20px 44px;
 }
 
 .finder-tile {
@@ -217,7 +213,6 @@ html, body.finder-body {
   border-radius: 8px;
   cursor: default;
   user-select: none;
-  /* fixed footprint so every tile lines up regardless of label length */
   height: calc(var(--icon-size) + 55px);
 }
 
@@ -238,9 +233,7 @@ html, body.finder-body {
   width: var(--icon-size);
   height: var(--icon-size);
   margin-bottom: 6px;
-  /* keep it from shrinking when the label below wraps to 2 lines */
   flex-shrink: 0;
-  /* anchor for the thumbnail overlay below */
   position: relative;
 }
 
@@ -250,13 +243,10 @@ html, body.finder-body {
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
 }
 
-/* once a real preview fades in, the fallback icon behind it goes away */
 .finder-icon.thumb-on > svg {
   display: none;
 }
 
-/* real thumbnails sit on top of the SVG icon (which stays as the
-   loading/failure fallback), Finder-style cover-crop with rounded corners */
 .finder-thumb {
   position: absolute;
   inset: 0;
@@ -275,13 +265,8 @@ html, body.finder-body {
   opacity: 1;
 }
 
-/* text/code previews: the document as tiny paper type, macOS-style.
-   small enough to read as miniature, indentation kept, long lines wrap
-   inside the icon instead of bleeding out */
 .finder-thumb-text {
   margin: 0;
-  /* portrait paper, Finder-style: auto width so the side insets actually
-     take (base .finder-thumb sets width:100%, which would override them) */
   width: auto;
   height: auto;
   top: 0;
@@ -300,9 +285,6 @@ html, body.finder-body {
   overflow: hidden;
 }
 
-/* PDF previews: rendered to canvas via pdf.js to match macOS Finder icon previews.
-   Exact page aspect ratio (no letterbox or gray bars), centered in the icon tile with
-   macOS document paper drop shadow and subtle border. */
 .finder-thumb-pdf {
   inset: auto;
   top: 50%;
@@ -333,7 +315,6 @@ html, body.finder-body {
   max-width: 100%;
   overflow-wrap: break-word;
   word-break: break-word;
-  /* -webkit-line-clamp is end-truncation only, true middle-truncation needs JS string-splitting */
   display: -webkit-box;
   -webkit-line-clamp: 2;
   line-clamp: 2;
@@ -350,7 +331,6 @@ html, body.finder-body {
   padding: 60px 0;
 }
 
-/* clear button under the "no matches" empty state */
 .finder-empty-btn {
   margin-top: 10px;
   padding: 4px 12px;
@@ -367,7 +347,6 @@ html, body.finder-body {
   background: rgba(255, 255, 255, 0.08);
 }
 
-/* right-click context menu, reuses the settings dropdown look but positioned at the cursor */
 .finder-context-menu {
   position: fixed;
   min-width: 170px;
@@ -379,7 +358,6 @@ html, body.finder-body {
   z-index: 30;
 }
 
-/* view-mode toolbar (icons/list segmented control), sits in the titlebar */
 .finder-toolbar {
   display: flex;
   align-items: center;
@@ -442,11 +420,9 @@ html, body.finder-body {
 
 .finder-list-col-size {
   text-align: right;
-  /* pull away from the date column, right-aligned sizes looked stuck to it */
   padding-right: 26px;
 }
 
-/* header cells are buttons now so columns are sortable, same look as before */
 .finder-list-col {
   background: transparent;
   border: none;
@@ -471,7 +447,6 @@ html, body.finder-body {
   color: #e6e6e6;
 }
 
-/* keep size right-aligned after the generic button reset above */
 button.finder-list-col-size {
   text-align: right;
   padding-right: 26px;
@@ -523,7 +498,6 @@ button.finder-list-col-size {
   text-overflow: ellipsis;
 }
 
-/* size is right-aligned like Finder, date/kind stay left-aligned */
 .finder-row-size {
   font-size: 12px;
   color: #9a9a9a;
@@ -531,7 +505,6 @@ button.finder-list-col-size {
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: right;
-  /* same breathing room as the header so sizes sit left of the date column */
   padding-right: 26px;
 }
 
@@ -543,7 +516,6 @@ button.finder-list-col-size {
   text-overflow: ellipsis;
 }
 
-/* hide the less-important columns on narrow windows so name + size still fit */
 @media (max-width: 700px) {
   .finder-list-header,
   .finder-row {
