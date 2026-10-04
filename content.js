@@ -24,6 +24,24 @@
     return "";
   }
 
+  // date column is whatever text is left after name + size, join split date/time cells back together
+  function dateTextFromRow(a) {
+    const tr = a.closest ? a.closest("tr") : null;
+    if (!tr || !tr.querySelectorAll) return "";
+    const cells = Array.from(tr.querySelectorAll("td"));
+    const nameIdx = cells.findIndex((td) => td.contains && td.contains(a));
+    const after = nameIdx >= 0 ? cells.slice(nameIdx + 1) : cells;
+    const bits = [];
+    for (const td of after) {
+      const t = (td.textContent || "").trim();
+      if (!t || t === "-" || t === "~") continue;
+      if (/^\d{4}$/.test(t)) { bits.push(t); continue; } // year piece of a split date, keep it
+      if (/^[\d.,]+\s*([kmgtpe]?i?b?|bytes?)$/i.test(t)) continue; // that's the size cell, not a date
+      bits.push(t);
+    }
+    return bits.join(" ").trim();
+  }
+
   // "1.2K" / "12 KB" / "3.4 GiB" -> bytes (1024-based, like the listings); "-" -> null
   function parseSizeBytes(text) {
     const t = (text || "").trim();
@@ -45,6 +63,18 @@
     return `${v >= 100 ? Math.round(v) : Math.round(v * 10) / 10} ${units[u]}`;
   }
 
+  // "9/28/2026, 10:00 AM" -> ms, garbage -> null (missing dates always sort last)
+  function parseDateMs(text) {
+    if (!text) return null;
+    const ms = Date.parse(text);
+    return isNaN(ms) ? null : ms;
+  }
+
+  // shared with the list column + sort, so rows and sorting never disagree
+  function kindLabel(entry) {
+    return entry.isDir ? "Folder" : (entry.ext ? entry.ext.toUpperCase() + " File" : "File");
+  }
+
   const anchors = Array.from(table.querySelectorAll("a[href]"));
 
   const entries = anchors
@@ -62,8 +92,9 @@
       const ext = isDir ? "" : (name.includes(".") ? name.split(".").pop().toLowerCase() : "");
       const isHidden = name.startsWith(".");
       const sizeText = sizeTextFromRow(a);
+      const dateText = dateTextFromRow(a);
 
-      return { name, href, isDir, ext, isHidden, sizeText, sizeBytes: parseSizeBytes(sizeText) };
+      return { name, href, isDir, ext, isHidden, sizeText, sizeBytes: parseSizeBytes(sizeText), dateText, dateMs: parseDateMs(dateText) };
     })
     .filter(Boolean);
 
@@ -77,7 +108,9 @@
     pdf: "pdf",
     image: "image",
     video: "video",
+    audio: "audio",
     code: "code",
+    text: "text",
     archive: "archive",
     file: "file",
   };
@@ -88,8 +121,13 @@
     webp: ICONS.image, svg: ICONS.image, heic: ICONS.image,
     mp4: ICONS.video, mov: ICONS.video, mkv: ICONS.video, webm: ICONS.video,
     avi: ICONS.video, m4v: ICONS.video,
+    mp3: ICONS.audio, wav: ICONS.audio, flac: ICONS.audio, aac: ICONS.audio,
+    ogg: ICONS.audio, oga: ICONS.audio, m4a: ICONS.audio, opus: ICONS.audio,
+    midi: ICONS.audio, mid: ICONS.audio,
     js: ICONS.code, ts: ICONS.code, py: ICONS.code, cpp: ICONS.code, c: ICONS.code,
     h: ICONS.code, java: ICONS.code, html: ICONS.code, css: ICONS.code, json: ICONS.code,
+    txt: ICONS.text, md: ICONS.text, markdown: ICONS.text, rtf: ICONS.text,
+    log: ICONS.text, csv: ICONS.text, tsv: ICONS.text,
     zip: ICONS.archive, tar: ICONS.archive, gz: ICONS.archive, rar: ICONS.archive, "7z": ICONS.archive,
   };
 
@@ -104,6 +142,8 @@
     pdf: `<svg viewBox="0 0 24 24" fill="none"><path d="M5 2.5c0-.55.45-1 1-1h6.5L19 8v13.5c0 .55-.45 1-1 1H6c-.55 0-1-.45-1-1V2.5Z" fill="#EC3A35" stroke="#A9231F" stroke-width="0.7" stroke-linejoin="round"/><path d="M12.5 1.5L19 8h-5.5c-.55 0-1-.45-1-1V1.5Z" fill="#FF9B96"/><text x="12" y="17.4" font-size="5.4" fill="#fff" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="800" letter-spacing="0.3">PDF</text></svg>`,
     image: `<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="16" rx="3" fill="#FFD24C" stroke="#B98A12" stroke-width="0.7"/><circle cx="8.5" cy="10" r="2" fill="#fff"/><path d="M4 18l5-5 4 4 3-3 4 4v1a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-1Z" fill="#fff"/></svg>`,
     video: `<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="3" fill="#3A4152" stroke="#1E222C" stroke-width="0.7"/><path d="M10.2 9.3v5.4L14.8 12l-4.6-2.7Z" fill="#fff" stroke="#fff" stroke-width="1" stroke-linejoin="round"/><rect x="6" y="15.8" width="12" height="1.4" rx="0.7" fill="#5A6376"/><rect x="6" y="15.8" width="5" height="1.4" rx="0.7" fill="#FF5A5A"/></svg>`,
+    audio: `<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4" fill="#34C77B" stroke="#1E7A4C" stroke-width="0.7"/><path d="M9.5 15.2V8.1l7-1.6v7.3" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"/><circle cx="7.6" cy="15.4" r="2.1" fill="#fff"/><circle cx="14.6" cy="14" r="2.1" fill="#fff"/></svg>`,
+    text: `<svg viewBox="0 0 24 24" fill="none"><path d="M5 2.5c0-.55.45-1 1-1h6.5L19 8v13.5c0 .55-.45 1-1 1H6c-.55 0-1-.45-1-1V2.5Z" fill="#F4F1E6" stroke="#9AA1AB" stroke-width="0.7" stroke-linejoin="round"/><path d="M12.5 1.5L19 8h-5.5c-.55 0-1-.45-1-1V1.5Z" fill="#D8D3C2"/><path d="M8 12.5h8M8 15.2h8M8 17.9h5" stroke="#8A8571" stroke-width="1.2" stroke-linecap="round"/></svg>`,
     code: `<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4" fill="#8E6BFF" stroke="#5B3FD4" stroke-width="0.7"/><path d="M9.2 8.5 6.5 12l2.7 3.5M14.8 8.5 17.5 12l-2.7 3.5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`,
     archive: `<svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="5" width="17" height="15" rx="2.5" fill="#C9A15A" stroke="#7A5E2B" stroke-width="0.7"/><rect x="10.5" y="5" width="3" height="15" fill="#8C6C33"/><rect x="3.5" y="9" width="17" height="1.2" fill="#8C6C33" opacity="0.65"/><rect x="9.7" y="11.2" width="4.6" height="3.4" rx="0.8" fill="#E8D9B0" stroke="#7A5E2B" stroke-width="0.6"/></svg>`,
     file: `<svg viewBox="0 0 24 24" fill="none"><path d="M5 2.5c0-.55.45-1 1-1h6.5L19 8v13.5c0 .55-.45 1-1 1H6c-.55 0-1-.45-1-1V2.5Z" fill="#D9DDE3" stroke="#9AA1AB" stroke-width="0.7" stroke-linejoin="round"/><path d="M12.5 1.5L19 8h-5.5c-.55 0-1-.45-1-1V1.5Z" fill="#F4F6F8"/><path d="M8 13h8M8 15.7h8M8 18.4h5" stroke="#9AA1AB" stroke-width="1.2" stroke-linecap="round"/></svg>`,
@@ -142,8 +182,11 @@
   });
 
   // sort menu, stashed in localStorage so it sticks across folders
+  // same modes drive the list column headers, so the two never disagree
   const SORT_MODES = {
     "name": "Name",
+    "size": "Size",
+    "date": "Date Modified",
     "type-name": "Type",
     "files-first": "Files first",
   };
@@ -158,31 +201,112 @@
   let viewMode = localStorage.getItem("finderViewMode") || "icons";
   if (!VIEW_MODES[viewMode]) viewMode = "icons";
 
+  // list headers sort ascending first, second click flips, all sticky like the other settings
+  let listSortDir = localStorage.getItem("finderListSortDir") || "asc";
+  if (listSortDir !== "asc" && listSortDir !== "desc") listSortDir = "asc";
+
+  // search filter, per-folder only (fresh page load = fresh search)
+  let filterText = "";
+
+  // columns and gear menu share modes, kind header is just the type mode
+  const COLUMN_TO_MODE = { name: "name", size: "size", date: "date", kind: "type-name" };
+  const MODE_TO_COLUMN = { name: "name", size: "size", date: "date", "type-name": "kind" };
+
+  function persistSort() {
+    localStorage.setItem("finderSortMode", sortMode);
+    localStorage.setItem("finderListSortDir", listSortDir);
+  }
+
+  // gear menu checkmarks follow programmatic changes too (like column clicks)
+  function syncSettingsMenu() {
+    if (typeof menu === "undefined") return;
+    menu.querySelectorAll(".finder-settings-item[data-sort-mode]").forEach((el) => {
+      el.classList.toggle("active", el.dataset.sortMode === sortMode);
+    });
+  }
+
+  function setSortMode(mode, dir) {
+    sortMode = mode;
+    if (dir) listSortDir = dir;
+    persistSort();
+    syncSettingsMenu();
+    renderGrid();
+  }
+
+  function setListSort(column) {
+    const mode = COLUMN_TO_MODE[column];
+    if (!mode) return;
+    if (mode === sortMode) {
+      // clicking the same column flips direction, Finder-style
+      listSortDir = listSortDir === "asc" ? "desc" : "asc";
+    } else {
+      sortMode = mode;
+      listSortDir = "asc";
+    }
+    persistSort();
+    syncSettingsMenu();
+    renderGrid();
+  }
+
   // case-insensitive name compare (with a case-sensitive tiebreak so order is stable)
   function cmpNames(a, b) {
     return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }) ||
       a.name.localeCompare(b.name, undefined, { numeric: true });
   }
 
+  // missing sizes/dates (folders, unknown) always sink to the bottom regardless of direction
+  function cmpMissingLast(aMissing, bMissing) {
+    if (aMissing && bMissing) return 0;
+    if (aMissing) return 1;
+    if (bMissing) return -1;
+    return 0;
+  }
+
+  // type compare shared by icons + list so the gear menu and kind column agree
+  function cmpByType(a, b) {
+    if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+    const ka = iconFor(a), kb = iconFor(b);
+    if (ka !== kb) return ka.localeCompare(kb);
+    if (a.ext !== b.ext) return a.ext.localeCompare(b.ext);
+    return cmpNames(a, b);
+  }
+
   function sortEntries(list) {
     const sorted = list.slice();
-    if (sortMode === "name") {
-      sorted.sort(cmpNames);
-    } else if (sortMode === "files-first") {
+    // icons view is always ascending, list view flips via its header arrows
+    const dir = viewMode === "list" && listSortDir === "desc" ? -1 : 1;
+    // files-first has no column, so it never flips
+    if (sortMode === "files-first") {
       sorted.sort((a, b) => {
         if (a.isDir !== b.isDir) return a.isDir ? 1 : -1;
         return cmpNames(a, b);
       });
-    } else {
-      // type: folders first, then group by icon kind, then extension, then name
-      sorted.sort((a, b) => {
-        if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
-        const ka = iconFor(a), kb = iconFor(b);
-        if (ka !== kb) return ka.localeCompare(kb);
-        if (a.ext !== b.ext) return a.ext.localeCompare(b.ext);
-        return cmpNames(a, b);
-      });
+      return sorted;
     }
+    if (sortMode === "size") {
+      sorted.sort((a, b) => {
+        // missing sizes stay at the bottom either way, only real sizes flip
+        const missing = cmpMissingLast(a.sizeBytes == null, b.sizeBytes == null);
+        if (missing !== 0) return missing;
+        const c = (a.sizeBytes || 0) - (b.sizeBytes || 0);
+        return c !== 0 ? dir * c : cmpNames(a, b);
+      });
+      return sorted;
+    }
+    if (sortMode === "date") {
+      sorted.sort((a, b) => {
+        const missing = cmpMissingLast(a.dateMs == null, b.dateMs == null);
+        if (missing !== 0) return missing;
+        const c = (a.dateMs || 0) - (b.dateMs || 0);
+        return c !== 0 ? dir * c : cmpNames(a, b);
+      });
+      return sorted;
+    }
+    if (sortMode === "type-name") {
+      sorted.sort((a, b) => dir * cmpByType(a, b));
+      return sorted;
+    }
+    sorted.sort((a, b) => dir * cmpNames(a, b));
     return sorted;
   }
 
@@ -209,6 +333,7 @@
     const item = document.createElement("button");
     item.type = "button";
     item.className = "finder-settings-item finder-settings-toggle";
+    item.dataset.sortMode = mode;
     if (mode === sortMode) item.classList.add("active");
 
     const itemLabel = document.createElement("span");
@@ -220,14 +345,9 @@
     item.appendChild(itemCheck);
 
     item.addEventListener("click", () => {
-      sortMode = mode;
-      localStorage.setItem("finderSortMode", sortMode);
-      // for the chosen settings to persist
-      menu.querySelectorAll(".finder-settings-item").forEach((el) => {
-        el.classList.toggle("active", el === item);
-      });
+      // gear picks the mode, direction resets so the column arrow is predictable
+      setSortMode(mode, "asc");
       menu.hidden = true;
-      renderGrid();
     });
     menu.appendChild(item);
   });
@@ -262,7 +382,7 @@
   });
   menu.appendChild(hiddenToggle);
 
-  // icon size slider, kept in localStorage same as the other settings
+  // icon size sliders, one per view so grid and list don't fight each other
   const sizeDivider = document.createElement("div");
   sizeDivider.className = "finder-settings-divider";
   menu.appendChild(sizeDivider);
@@ -273,23 +393,11 @@
   let iconSize = parseInt(localStorage.getItem("finderIconSize"), 10);
   if (!iconSize || iconSize < MIN_ICON || iconSize > MAX_ICON) iconSize = DEFAULT_ICON;
 
-  const sizeRow = document.createElement("div");
-  sizeRow.className = "finder-settings-slider-row";
-
-  const sizeHeading = document.createElement("div");
-  sizeHeading.className = "finder-settings-heading";
-  sizeHeading.textContent = "Icon size";
-  sizeRow.appendChild(sizeHeading);
-
-  const sizeSlider = document.createElement("input");
-  sizeSlider.type = "range";
-  sizeSlider.className = "finder-settings-slider";
-  sizeSlider.min = String(MIN_ICON);
-  sizeSlider.max = String(MAX_ICON);
-  sizeSlider.value = String(iconSize);
-  sizeSlider.setAttribute("aria-label", "Icon size");
-  sizeRow.appendChild(sizeSlider);
-  menu.appendChild(sizeRow);
+  const MIN_LIST_ICON = 16;
+  const MAX_LIST_ICON = 48;
+  const DEFAULT_LIST_ICON = 28;
+  let listIconSize = parseInt(localStorage.getItem("finderListIconSize"), 10);
+  if (!listIconSize || listIconSize < MIN_LIST_ICON || listIconSize > MAX_LIST_ICON) listIconSize = DEFAULT_LIST_ICON;
 
   function setIconSize(value) {
     iconSize = value;
@@ -297,14 +405,57 @@
     document.body.style.setProperty("--icon-size", iconSize + "px");
   }
 
-  // apply on load and live-update while dragging
-  setIconSize(iconSize);
+  function setListIconSize(value) {
+    listIconSize = value;
+    localStorage.setItem("finderListIconSize", String(listIconSize));
+    document.body.style.setProperty("--list-icon-size", listIconSize + "px");
+  }
+
+  // one slider, retargeted per view so grid and list keep independent sizes
+  const sizeRow = document.createElement("div");
+  sizeRow.className = "finder-settings-slider-row";
+
+  const sizeHeading = document.createElement("div");
+  sizeHeading.className = "finder-settings-heading";
+  sizeRow.appendChild(sizeHeading);
+
+  const sizeSlider = document.createElement("input");
+  sizeSlider.type = "range";
+  sizeSlider.className = "finder-settings-slider";
+  sizeRow.appendChild(sizeSlider);
+  menu.appendChild(sizeRow);
+
+  // slider reflects whichever view is active, switching views swaps its range/value
+  function refreshSizeSlider() {
+    if (viewMode === "list") {
+      sizeHeading.textContent = "List icon size";
+      sizeSlider.min = String(MIN_LIST_ICON);
+      sizeSlider.max = String(MAX_LIST_ICON);
+      sizeSlider.value = String(listIconSize);
+      sizeSlider.setAttribute("aria-label", "List icon size");
+    } else {
+      sizeHeading.textContent = "Grid icon size";
+      sizeSlider.min = String(MIN_ICON);
+      sizeSlider.max = String(MAX_ICON);
+      sizeSlider.value = String(iconSize);
+      sizeSlider.setAttribute("aria-label", "Grid icon size");
+    }
+  }
+
+  // live-update while dragging, routed to the active view's setting
   sizeSlider.addEventListener("input", () => {
-    setIconSize(parseInt(sizeSlider.value, 10));
+    const value = parseInt(sizeSlider.value, 10);
+    if (viewMode === "list") setListIconSize(value);
+    else setIconSize(value);
   });
   // slider drag shouldn't close the menu like the other items do
   sizeSlider.addEventListener("click", (e) => e.stopPropagation());
   sizeSlider.addEventListener("mousedown", (e) => e.stopPropagation());
+
+  // apply on load, each view reads its own var so they stay independent
+  setIconSize(iconSize);
+  setListIconSize(listIconSize);
+  refreshSizeSlider();
 
   const menuDivider = document.createElement("div");
   menuDivider.className = "finder-settings-divider";
@@ -370,18 +521,44 @@
     statusFolder.textContent = centerName;
     statusFolder.title = centerName;
 
-    // right side: summed size of the selection
+    // right side: summed size of files. Chrome's listing reports "-" for
+    // folders, so folder sizes are unknown — never count them as 0, just
+    // say how many were excluded so the total isn't misleading.
     const pool = n > 0 ? Array.from(selected) : list;
+    const poolEntries = pool
+      .map((tile) => currentVisible[parseInt(tile.dataset.entryIndex, 10)])
+      .filter(Boolean);
     let bytes = 0;
     let known = false;
-    pool.forEach((tile) => {
-      const entry = currentVisible[parseInt(tile.dataset.entryIndex, 10)];
-      if (entry && entry.sizeBytes !== null && entry.sizeBytes !== undefined) {
+    let folderCount = 0;
+    poolEntries.forEach((entry) => {
+      if (entry.isDir) {
+        folderCount++;
+        return;
+      }
+      if (entry.sizeBytes !== null && entry.sizeBytes !== undefined) {
         bytes += entry.sizeBytes;
         known = true;
       }
     });
-    statusSize.textContent = !known ? (n > 0 ? "—" : "") : (n > 0 ? formatBytes(bytes) : `${formatBytes(bytes)} total`);
+    const folderSuffix = (count) => (count === 1 ? "1 folder" : `${count} folders`);
+    if (!known) {
+      // no files with a known size in the pool: folders-only or empty
+      if (n > 0) {
+        statusSize.textContent = folderCount > 0 ? `\u2014 (${folderSuffix(folderCount)})` : "\u2014";
+      } else {
+        statusSize.textContent = folderCount > 0 ? folderSuffix(folderCount) : "";
+      }
+    } else if (n > 0) {
+      statusSize.textContent = folderCount > 0
+        ? `${formatBytes(bytes)} (+ ${folderSuffix(folderCount)})`
+        : formatBytes(bytes);
+    } else {
+      statusSize.textContent = folderCount > 0
+        ? `${formatBytes(bytes)} total (${folderSuffix(folderCount)} excluded)`
+        : `${formatBytes(bytes)} total`;
+    }
+    statusSize.title = statusSize.textContent;
   }
 
   // multi-select: a Set of tiles. Cmd/Ctrl+click toggles one, Shift+click selects all from the last-clicked tile
@@ -454,6 +631,8 @@
     localStorage.setItem("finderViewMode", viewMode);
     iconsBtn.classList.toggle("active", viewMode === "icons");
     listBtn.classList.toggle("active", viewMode === "list");
+    // slider follows the view so it always edits the size you're looking at
+    refreshSizeSlider();
     renderGrid();
   }
 
@@ -465,7 +644,39 @@
   toolbar.appendChild(iconsBtn);
   toolbar.appendChild(listBtn);
 
+  // quick filter, just narrows the current folder by name (no searching subfolders)
+  const searchWrap = document.createElement("div");
+  searchWrap.className = "finder-search";
+
+  const searchInput = document.createElement("input");
+  searchInput.type = "search";
+  searchInput.className = "finder-search-input";
+  searchInput.placeholder = "Search";
+  searchInput.setAttribute("aria-label", "Filter by name");
+  searchInput.autocomplete = "off";
+  searchInput.spellcheck = false;
+  searchWrap.appendChild(searchInput);
+
+  searchInput.addEventListener("input", () => {
+    filterText = searchInput.value.trim().toLowerCase();
+    renderGrid();
+  });
+  // esc clears the filter first, second esc blurs out
+  searchInput.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      if (searchInput.value) {
+        searchInput.value = "";
+        filterText = "";
+        renderGrid();
+      } else {
+        searchInput.blur();
+      }
+    }
+  });
+
   bar.appendChild(crumbs);
+  bar.appendChild(searchWrap);
   bar.appendChild(toolbar);
   bar.appendChild(settingsWrap);
   document.body.appendChild(bar);
@@ -565,22 +776,58 @@
     selected = new Set();
     lastClickedTile = null;
 
-    const visible = showHidden ? entries : entries.filter((e) => !e.isHidden);
+    let visible = showHidden ? entries.slice() : entries.filter((e) => !e.isHidden);
+    // filter by name only, keeps hidden/size/date logic untouched
+    if (filterText) {
+      visible = visible.filter((e) => e.name.toLowerCase().includes(filterText));
+    }
 
     if (visible.length === 0) {
       const empty = document.createElement("div");
       empty.className = "finder-empty";
-      empty.textContent = "This folder is empty";
+      // tell filtered-zero apart from actually-empty so it doesn't look broken
+      empty.textContent = filterText ? `No matches for "${searchInput.value.trim()}"` : "This folder is empty";
       freshGrid.appendChild(empty);
+      if (filterText) {
+        const clearBtn = document.createElement("button");
+        clearBtn.type = "button";
+        clearBtn.className = "finder-empty-btn";
+        clearBtn.textContent = "Clear search";
+        clearBtn.addEventListener("click", () => {
+          searchInput.value = "";
+          filterText = "";
+          renderGrid();
+          searchInput.focus();
+        });
+        empty.appendChild(document.createElement("br"));
+        empty.appendChild(clearBtn);
+      }
     }
 
     if (viewMode === "list" && visible.length > 0) {
       const header = document.createElement("div");
       header.className = "finder-list-header";
-      header.innerHTML = `
-        <span class="finder-list-col-name">Name</span>
-        <span class="finder-list-col-kind">Kind</span>
-      `;
+      // clickable columns, active arrow follows the gear menu mode so the two stay in sync
+      // (files-first has no column, so nothing highlights then)
+      const activeColumn = MODE_TO_COLUMN[sortMode] || null;
+      const cols = [
+        ["name", "Name", "finder-list-col-name"],
+        ["size", "Size", "finder-list-col-size"],
+        ["date", "Date Modified", "finder-list-col-date"],
+        ["kind", "Kind", "finder-list-col-kind"],
+      ];
+      cols.forEach(([key, label, cls]) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "finder-list-col " + cls;
+        if (key === activeColumn) btn.classList.add("sorted");
+        const arrow = key === activeColumn ? (listSortDir === "asc" ? " \u25B2" : " \u25BC") : "";
+        btn.textContent = label + arrow;
+        btn.title = `Sort by ${label}`;
+        btn.setAttribute("aria-label", `Sort by ${label}`);
+        btn.addEventListener("click", () => setListSort(key));
+        header.appendChild(btn);
+      });
       freshGrid.appendChild(header);
     }
 
@@ -609,9 +856,23 @@
         nameCol.appendChild(label);
         tile.appendChild(nameCol);
 
+        const size = document.createElement("div");
+        size.className = "finder-row-size";
+        // Chrome's file:// listing reports "-" for folders, so their size is
+
+        size.textContent = entry.isDir ? "\u2014" : (entry.sizeText && entry.sizeText !== "-" ? entry.sizeText : "\u2014");
+        size.title = entry.isDir ? "Folder size isn't listed" : size.textContent;
+        tile.appendChild(size);
+
+        const date = document.createElement("div");
+        date.className = "finder-row-date";
+        date.textContent = entry.dateText || "\u2014";
+        date.title = date.textContent;
+        tile.appendChild(date);
+
         const kind = document.createElement("div");
         kind.className = "finder-row-kind";
-        kind.textContent = entry.isDir ? "Folder" : (entry.ext ? entry.ext.toUpperCase() + " File" : "File");
+        kind.textContent = kindLabel(entry);
         tile.appendChild(kind);
       } else {
         tile.appendChild(iconWrap);
@@ -673,9 +934,34 @@
     }
   });
 
+  // Cmd/Ctrl+F focuses search, let typing keys alone when already in a field
+  function typingInField() {
+    const el = document.activeElement;
+    return el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && (e.key === "f" || e.key === "F")) {
+      e.preventDefault();
+      searchInput.focus();
+      searchInput.select();
+    }
+  });
+
+  // "/" jumps to search when not already typing, Finder-ish quick find
+  document.addEventListener("keydown", (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (typingInField()) return;
+    if (e.key === "/") {
+      e.preventDefault();
+      searchInput.focus();
+    }
+  });
+
   // Cmd/Ctrl+A selects all (multi-select).
   document.addEventListener("keydown", (e) => {
     if (!(e.metaKey || e.ctrlKey)) return;
+    if (typingInField()) return; // let text fields keep native select-all
     if (e.key === "a") {
       e.preventDefault();
       const list = tiles();
@@ -688,6 +974,7 @@
 
   // Basic keyboard nav with arrow keys and Enter to move and open
   document.addEventListener("keydown", (e) => {
+    if (typingInField()) return; // arrows/enter belong to the search box while typing
     // Cmd/Ctrl+Left/Right is browser back/forward, don't override
     if ((e.metaKey || e.ctrlKey) && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
       return;

@@ -1,21 +1,28 @@
-# Finder for Folders v0.1.1
+# Finder for Folders v0.2
 
 Makes your browser's `file://` folder listing look and behave like a macOS Finder window
 
-## Features (v0.1)
+## Features (v0.2)
 
 - Finder-style dark icon grid for local folders
-- Per-type icons: folder, PDF, image, video, code, archive, generic file
+- Per-type icons: folder, PDF, image, video, audio, code, text, archive, generic file
 - Breadcrumb title bar built from the URL path
+- Search box in the title bar: filters the current folder by name (per-folder, not recursive)
 - Settings menu (gear, top right):
-  - Sort by: `Name / Type (folders first) / Files first` stored in `localStorage`
+  - Sort by: `Name / Size / Date Modified / Type (folders first) / Files first` stored in `localStorage`
   - Show hidden files toggle (dotfiles like `.DS_Store`)
-  - Icon size slider (`48–256`, stored in `localStorage`)
-- Single click to select, double click to open (has no real purpose right now but will be used for status bar later)
-- Open in background tab (stay in the folder tab): `Shift+Enter`, `Shift+double-click`, `Cmd+click` (Mac) / `Ctrl+click` (Windows/Linux)
+  - One icon size slider that follows the active view: grid icons (`48–256`) in Icons view, row icons (`16–48`) in List view — each view keeps its own size in `localStorage`
+- Icons / List view toggle, stored in `localStorage`
+- List view: `Name / Size / Date Modified / Kind` columns, click a header to sort (click again to flip direction) — stays in sync with the gear menu sort
+- Status bar (bottom): item count, selection count, files' summed size — folder sizes aren't reported by the listing, so folders show as `—` and totals note how many folders were excluded
+- Multi-select: `Cmd/Ctrl+click` to toggle, `Shift+click` for a range, `Cmd/Ctrl+A` for all
+- Right-click context menu: Open, Open in new tab, Copy link — becomes "Open N items" / "Open N items in new tabs" when multiple items are selected
+- Bulk open: select several items, then right-click → **Open N items**, or press `Cmd/Ctrl+Enter` — opens each in its own background tab
+- Single click to select, double click to open
+- Open in background tab (stay in the folder tab): `Cmd+click` (Mac) / `Ctrl+click` (Windows/Linux), middle-click
 - Keyboard navigation: Arrow keys to move, `Enter` to open
 - Hidden-file shortcut: `Cmd+Shift+.` (Mac) / `Ctrl+Shift+.` (Windows/Linux)
-- Empty-folder state
+- Empty-folder and no-matches states (with a Clear search button)
 
 
 ## Shortcuts
@@ -25,8 +32,11 @@ Makes your browser's `file://` folder listing look and behave like a macOS Finde
 | Toggle hidden files | `Cmd+Shift+.` | `Ctrl+Shift+.` |
 | Move selection | Arrow keys | Arrow keys |
 | Open selected | `Enter` | `Enter` |
-| Open in new background tab (keyboard) | `Shift+Enter` | `Shift+Enter` |
-| Open in new background tab (mouse) | `Shift+double-click` or `Cmd+click` | `Shift+double-click` or `Ctrl+click` |
+| Open in new background tab (single, keyboard) | `Cmd+Enter` | `Ctrl+Enter` |
+| Open in new background tab (single, mouse) | `Cmd+click` or middle-click | `Ctrl+click` or middle-click |
+| Open whole selection in background tabs | `Cmd+Enter` (2+ selected), or right-click → Open N items | `Ctrl+Enter` (2+ selected), or right-click → Open N items |
+| Focus search | `Cmd+F` or `/` | `Ctrl+F` or `/` |
+| Clear search | `Esc` (in search box) | `Esc` (in search box) |
 
 ## Install (unpacked)
 1. Clone this repo
@@ -54,30 +64,28 @@ Makes your browser's `file://` folder listing look and behave like a macOS Finde
 </table>
 
 ## What's next?
-- Adding a Status bar to show info for the selected file
-- Adding view options (list/grid), its just grid rn
-- Implement search
 - Show actual thumbnails for the files, insted of the current svg images
+- Drag-and-drop, rename/delete
 
 ## How it works
 
 1. Runs only on `file:///*` pages
 2. Runs on the page if it looks like Chrome's auto-generated listing (`document.title` starts with `Index of` + a `<table>` exists)
-3. Parses `<a href>` rows into `{ name, href, isDir, ext, isHidden }`, skipping the parent-directory row
-4. Wipes `<body>` and renders the Finder UI (title bar + grid)
-5. Background-tab opens (`Shift+Enter`, `Shift+double-click`, `Cmd/Ctrl+click`) go through `background.js` via `chrome.tabs.create({ active: false })`, so the folder tab stays focused
+3. Parses `<a href>` rows into `{ name, href, isDir, ext, isHidden, sizeText, sizeBytes, dateText, dateMs }`, skipping the parent-directory row
+4. Wipes `<body>` and renders the Finder UI (title bar + search + toolbar + grid/list + status bar)
+5. Background-tab opens (single: `Cmd/Ctrl+click`, middle-click; bulk: `Cmd/Ctrl+Enter` or the context menu with 2+ selected) go through `background.js` via `chrome.tabs.create({ active: false })`, so the folder tab stays focused
 
 ## Permissions & privacy
 
 - Host access: `file:///*` only
-- Storage: `localStorage` only (`finderSortMode`, `finderShowHidden`, `finderIconSize`)
+- Storage: `localStorage` only (`finderSortMode`, `finderShowHidden`, `finderViewMode`, `finderIconSize`, `finderListIconSize`, `finderListSortDir`)
 - Tabs: background worker opens background tabs next to the folder tab (`chrome.tabs.create` with `active: false`)
 
-## Known limitations (v0.1)
+## Known limitations (v0.2)
 
 - Chromium only, no Firefox yet
 - No real thumbnails (image/PDF previews)
-- No list view; no sort by size/date
+- Search filters the current folder only, no subfolders
 - No drag-and-drop, no rename/delete
 - Not yet packaged for the Chrome Web Store
 
