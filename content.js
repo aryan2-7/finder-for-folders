@@ -72,7 +72,10 @@
 
   // shared with the list column + sort, so rows and sorting never disagree
   function kindLabel(entry) {
-    return entry.isDir ? "Folder" : (entry.ext ? entry.ext.toUpperCase() + " File" : "File");
+    if (entry.isDir) return "Folder";
+    if (!entry.ext) return "File";
+    if (iconFor(entry) === ICONS.executable) return "Unix Executable File";
+    return entry.ext.toUpperCase() + " File";
   }
 
   const anchors = Array.from(table.querySelectorAll("a[href]"));
@@ -112,6 +115,7 @@
     code: "code",
     text: "text",
     archive: "archive",
+    executable: "executable",
     file: "file",
   };
 
@@ -129,6 +133,7 @@
     txt: ICONS.text, md: ICONS.text, markdown: ICONS.text, rtf: ICONS.text,
     log: ICONS.text, csv: ICONS.text, tsv: ICONS.text,
     zip: ICONS.archive, tar: ICONS.archive, gz: ICONS.archive, rar: ICONS.archive, "7z": ICONS.archive,
+    out: ICONS.executable,
   };
 
   function iconFor(entry) {
@@ -146,6 +151,7 @@
     text: `<svg viewBox="0 0 24 24" fill="none"><path d="M5 2.5c0-.55.45-1 1-1h6.5L19 8v13.5c0 .55-.45 1-1 1H6c-.55 0-1-.45-1-1V2.5Z" fill="#F4F1E6" stroke="#9AA1AB" stroke-width="0.7" stroke-linejoin="round"/><path d="M12.5 1.5L19 8h-5.5c-.55 0-1-.45-1-1V1.5Z" fill="#D8D3C2"/><path d="M8 12.5h8M8 15.2h8M8 17.9h5" stroke="#8A8571" stroke-width="1.2" stroke-linecap="round"/></svg>`,
     code: `<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4" fill="#8E6BFF" stroke="#5B3FD4" stroke-width="0.7"/><path d="M9.2 8.5 6.5 12l2.7 3.5M14.8 8.5 17.5 12l-2.7 3.5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`,
     archive: `<svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="5" width="17" height="15" rx="2.5" fill="#C9A15A" stroke="#7A5E2B" stroke-width="0.7"/><rect x="10.5" y="5" width="3" height="15" fill="#8C6C33"/><rect x="3.5" y="9" width="17" height="1.2" fill="#8C6C33" opacity="0.65"/><rect x="9.7" y="11.2" width="4.6" height="3.4" rx="0.8" fill="#E8D9B0" stroke="#7A5E2B" stroke-width="0.6"/></svg>`,
+    executable: `<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4" fill="#101010" stroke="#4A4A4A" stroke-width="0.7"/><path d="M7 9.2 10 12l-3 2.8" stroke="#4CD964" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M12.5 15.5H17" stroke="#4CD964" stroke-width="1.8" stroke-linecap="round"/></svg>`,
     file: `<svg viewBox="0 0 24 24" fill="none"><path d="M5 2.5c0-.55.45-1 1-1h6.5L19 8v13.5c0 .55-.45 1-1 1H6c-.55 0-1-.45-1-1V2.5Z" fill="#D9DDE3" stroke="#9AA1AB" stroke-width="0.7" stroke-linejoin="round"/><path d="M12.5 1.5L19 8h-5.5c-.55 0-1-.45-1-1V1.5Z" fill="#F4F6F8"/><path d="M8 13h8M8 15.7h8M8 18.4h5" stroke="#9AA1AB" stroke-width="1.2" stroke-linecap="round"/></svg>`,
   };
 
@@ -195,6 +201,10 @@
 
   // hidden files (dotfiles like .DS_Store) stay off by default
   let showHidden = localStorage.getItem("finderShowHidden") === "true";
+
+  // real thumbnails (images / video first-frame / PDF first-page) are on by
+  // default, icons view only — the SVG icon stays underneath as fallback
+  let showThumbs = localStorage.getItem("finderShowThumbnails") !== "false";
 
   // icons vs list layout, sticky across folders like the other settings
   const VIEW_MODES = { icons: "Icons", list: "List" };
@@ -381,6 +391,32 @@
     setShowHidden(!showHidden);
   });
   menu.appendChild(hiddenToggle);
+
+  const thumbToggle = document.createElement("button");
+  thumbToggle.type = "button";
+  thumbToggle.className = "finder-settings-item finder-settings-toggle";
+  if (showThumbs) thumbToggle.classList.add("active");
+
+  const thumbToggleLabel = document.createElement("span");
+  thumbToggleLabel.textContent = "Show thumbnails";
+  const thumbToggleCheck = document.createElement("span");
+  thumbToggleCheck.className = "finder-settings-checkmark";
+  thumbToggleCheck.textContent = "\u2713";
+
+  thumbToggle.appendChild(thumbToggleLabel);
+  thumbToggle.appendChild(thumbToggleCheck);
+
+  function setShowThumbs(value) {
+    showThumbs = value;
+    localStorage.setItem("finderShowThumbnails", String(showThumbs));
+    thumbToggle.classList.toggle("active", showThumbs);
+    renderGrid();
+  }
+
+  thumbToggle.addEventListener("click", () => {
+    setShowThumbs(!showThumbs);
+  });
+  menu.appendChild(thumbToggle);
 
   // icon size sliders, one per view so grid and list don't fight each other
   const sizeDivider = document.createElement("div");
@@ -769,12 +805,188 @@
     if (e.key === "Escape") closeCtxMenu();
   });
 
+  // real thumbnails, icons view only. Images via <img>, videos via <video>
+  // (first frame through a #t=0.1 media fragment), PDFs via an embedded
+  // first-page render, text/code via the first lines fetched through the
+  // background worker (content scripts can't fetch file:// URLs themselves).
+  // heic/heif + mkv/avi are left as icons — Chrome can't render them, so
+  // they'd just burn requests before falling back anyway.
+  const THUMB_IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "avif", "bmp", "ico"]);
+  const THUMB_VIDEO_EXTS = new Set(["mp4", "m4v", "mov", "webm", "ogv"]);
+  // same set the code/text icons use, so previews and icons never disagree
+  const THUMB_TEXT_EXTS = new Set(["txt", "md", "markdown", "rtf", "log", "csv", "tsv",
+    "js", "ts", "py", "cpp", "c", "h", "java", "html", "css", "json"]);
+  const MAX_THUMB_BYTES = 50 * 1024 * 1024; // skip huge files, the icon stays
+  // text fetch is byte-capped by the worker, so no size guard needed there
+
+  function thumbKind(entry) {
+    if (entry.isDir || !showThumbs || viewMode !== "icons") return null;
+    if (THUMB_TEXT_EXTS.has(entry.ext)) return "text";
+    if (entry.sizeBytes != null && entry.sizeBytes > MAX_THUMB_BYTES) return null;
+    if (entry.ext === "pdf") return "pdf";
+    if (THUMB_IMAGE_EXTS.has(entry.ext)) return "image";
+    if (THUMB_VIDEO_EXTS.has(entry.ext)) return "video";
+    return null;
+  }
+
+  // text preview bodies, cached per page load so re-renders don't refetch.
+  // url -> shaped string, or null when it failed (don't retry those)
+  const textThumbCache = new Map();
+
+  // document miniature: up to 60 lines, tabs flattened to 2 spaces so
+  // indentation survives, wrapped by CSS inside the icon
+  function shapeTextThumb(text, truncated) {
+    const lines = String(text).split(/\r\n|\r|\n/).slice(0, 60)
+      .map((line) => line.replace(/\t/g, "  ").slice(0, 300));
+    // drop trailing blank lines so short files don't preview as empty paper
+    while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+    if (!lines.length) return null;
+    const cut = truncated || String(text).split(/\r\n|\r|\n/).length > 60;
+    return lines.join("\n") + (cut ? "\n…" : "");
+  }
+
+  function requestTextThumb(el) {
+    const url = el.dataset.thumbTextUrl;
+    if (!url) return;
+    delete el.dataset.thumbTextUrl;
+    const apply = (text) => {
+      // re-renders discard tiles; never populate a detached one
+      if (text == null || !el.isConnected) return;
+      el.textContent = text;
+      el.classList.add("loaded");
+      // preview's in — drop the fallback icon behind it
+      if (el.parentElement) el.parentElement.classList.add("thumb-on");
+    };
+    if (textThumbCache.has(url)) {
+      apply(textThumbCache.get(url));
+      return;
+    }
+    let result = null;
+    try {
+      if (chrome && chrome.runtime && chrome.runtime.sendMessage) {
+        result = chrome.runtime.sendMessage({ type: "finder-fetch-text", url });
+      }
+    } catch (e) {
+      result = null; // no worker (file access off?) — icon stays
+    }
+    if (result && typeof result.then === "function") {
+      result.then((res) => {
+        const text = res && res.ok ? shapeTextThumb(res.text, res.truncated) : null;
+        textThumbCache.set(url, text);
+        apply(text);
+      }).catch(() => textThumbCache.set(url, null));
+    } else {
+      textThumbCache.set(url, null);
+    }
+  }
+
+  // PDF probe results, cached per page load so re-renders don't refetch.
+  // target -> true (render it) or false (keep the icon, never retry)
+  const pdfThumbCache = new Map();
+
+  // empty/corrupt PDFs make Chrome's viewer render a "Failed to load PDF
+  // document" error bar inside the thumbnail — probe the magic bytes first
+  // and drop those back to the icon instead
+  function requestPdfThumb(el, src) {
+    const target = src || el.dataset.thumbSrc;
+    if (!target) return;
+    delete el.dataset.thumbSrc;
+    const show = () => {
+      // re-renders discard tiles; never load into a detached one
+      if (!el.isConnected) return;
+      el.src = target;
+      // <embed> fires no reliable load event, just fade in its wrapper —
+      // the icon underneath covers the brief blank flash
+      setTimeout(() => {
+        const showEl = el._showTarget || el;
+        showEl.classList.add("loaded");
+        // preview's in — drop the fallback icon behind it
+        if (showEl.parentElement) showEl.parentElement.classList.add("thumb-on");
+      }, 600);
+    };
+    const drop = () => {
+      const wrap = el._showTarget || el;
+      if (wrap.isConnected) wrap.remove();
+    };
+    if (pdfThumbCache.has(target)) {
+      if (pdfThumbCache.get(target)) show();
+      else drop();
+      return;
+    }
+    let result = null;
+    try {
+      if (chrome && chrome.runtime && chrome.runtime.sendMessage) {
+        result = chrome.runtime.sendMessage({ type: "finder-check-pdf", url: target });
+      }
+    } catch (e) {
+      result = null; // no worker (file access off?) — try the embed directly
+    }
+    if (result && typeof result.then === "function") {
+      result.then((res) => {
+        if (!res || !res.ok) {
+          // probe itself failed, not the file — render like before probing
+          pdfThumbCache.set(target, true);
+          show();
+          return;
+        }
+        pdfThumbCache.set(target, !!res.valid);
+        if (res.valid) show();
+        else drop();
+      }).catch(() => {
+        pdfThumbCache.set(target, true);
+        show();
+      });
+    } else {
+      show();
+    }
+  }
+
+  // one observer per render: thumbnails only fetch once they scroll near the
+  // viewport, so a folder with hundreds of photos doesn't hammer the disk
+  let thumbObserver = null;
+
+  function ensureThumbObserver() {
+    if (thumbObserver) thumbObserver.disconnect();
+    if (!("IntersectionObserver" in window)) {
+      thumbObserver = null;
+      return null;
+    }
+    thumbObserver = new IntersectionObserver((ioEntries) => {
+      ioEntries.forEach((io) => {
+        if (!io.isIntersecting) return;
+        const el = io.target;
+        thumbObserver.unobserve(el);
+        // text previews fetch their body instead of setting a src
+        if (el.tagName === "PRE") {
+          requestTextThumb(el);
+          return;
+        }
+        const src = el.dataset.thumbSrc;
+        if (!src) return;
+        delete el.dataset.thumbSrc;
+        if (el.tagName === "VIDEO") {
+          el.preload = "metadata";
+          el.src = src;
+          el.load();
+        } else if (el.tagName === "EMBED") {
+          // PDFs probe their magic bytes first, broken ones stay icons.
+          // (src was already pulled out of the dataset above, pass it along)
+          requestPdfThumb(el, src);
+        } else {
+          el.src = src;
+        }
+      });
+    }, { rootMargin: "300px" });
+    return thumbObserver;
+  }
+
   // builds the tile grid using the current sortMode and viewMode
   function renderGrid() {
     const freshGrid = document.createElement("div");
     freshGrid.className = viewMode === "list" ? "finder-grid finder-grid-list" : "finder-grid";
     selected = new Set();
     lastClickedTile = null;
+    ensureThumbObserver();
 
     let visible = showHidden ? entries.slice() : entries.filter((e) => !e.isHidden);
     // filter by name only, keeps hidden/size/date logic untouched
@@ -843,6 +1055,89 @@
       const iconWrap = document.createElement("div");
       iconWrap.className = "finder-icon";
       iconWrap.innerHTML = SVG[iconFor(entry)];
+
+      // thumbnail overlay (icons view only): the SVG icon above stays
+      // underneath as the loading/failure fallback, the real preview fades
+      // in on top once it loads and the failed ones just remove themselves
+      const tk = thumbKind(entry);
+      if (tk === "text") {
+        // text/code: first lines fetched via the background worker,
+        // rendered as tiny monospace on paper — textContent only, never HTML
+        const fileUrl = new URL(entry.href, location.href).href;
+        const pre = document.createElement("pre");
+        pre.className = "finder-thumb finder-thumb-text";
+        pre.setAttribute("aria-hidden", "true");
+        pre.dataset.thumbTextUrl = fileUrl;
+        if (thumbObserver) {
+          thumbObserver.observe(pre);
+        } else {
+          // no IntersectionObserver (very old browser): fetch immediately
+          requestTextThumb(pre);
+        }
+        iconWrap.appendChild(pre);
+      } else if (tk === "pdf") {
+        // PDFs: first page only. The viewer can't scroll (pointer-events
+        // are off on .finder-thumb) and its scrollbars are hidden two ways:
+        // the scrollbar=0 param, plus the embed running 14px wider than its
+        // overflow-hidden wrapper so any rendered scrollbar is clipped away
+        const fileUrl = new URL(entry.href, location.href).href;
+        const target = fileUrl + "#page=1&zoom=page-width&toolbar=0&navpanes=0&scrollbar=0";
+        const wrap = document.createElement("div");
+        wrap.className = "finder-thumb finder-thumb-pdf";
+        wrap.setAttribute("aria-hidden", "true");
+        const emb = document.createElement("embed");
+        emb.type = "application/pdf";
+        emb._showTarget = wrap;
+        wrap.appendChild(emb);
+        iconWrap.appendChild(wrap);
+        emb.dataset.thumbSrc = target;
+        if (thumbObserver) {
+          thumbObserver.observe(emb);
+        } else {
+          // no IntersectionObserver (very old browser): probe + load now
+          requestPdfThumb(emb);
+        }
+      } else if (tk) {
+        const fileUrl = new URL(entry.href, location.href).href;
+        let media = null;
+        let target = fileUrl;
+        if (tk === "image") {
+          media = document.createElement("img");
+          media.decoding = "async";
+          media.alt = "";
+          media.addEventListener("load", () => {
+            media.classList.add("loaded");
+            if (media.parentElement) media.parentElement.classList.add("thumb-on");
+          });
+          media.addEventListener("error", () => media.remove());
+        } else if (tk === "video") {
+          media = document.createElement("video");
+          media.muted = true;
+          media.playsInline = true;
+          media.preload = "none";
+          media.setAttribute("playsinline", "");
+          media.addEventListener("loadeddata", () => {
+            media.classList.add("loaded");
+            if (media.parentElement) media.parentElement.classList.add("thumb-on");
+          });
+          media.addEventListener("error", () => media.remove());
+          target = fileUrl + "#t=0.1";
+        }
+        if (media) {
+          media.className = "finder-thumb";
+          media.setAttribute("aria-hidden", "true");
+          if (thumbObserver) {
+            media.dataset.thumbSrc = target;
+            thumbObserver.observe(media);
+          } else {
+            // no IntersectionObserver (very old browser): load immediately,
+            // still waiting for the real load event before fading in
+            if (media.tagName === "VIDEO") media.preload = "metadata";
+            media.src = target;
+          }
+          iconWrap.appendChild(media);
+        }
+      }
 
       const label = document.createElement("div");
       label.className = "finder-label";

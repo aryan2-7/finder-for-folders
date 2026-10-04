@@ -5,10 +5,12 @@ Makes your browser's `file://` folder listing look and behave like a macOS Finde
 ## Features (v0.2)
 
 - Finder-style dark icon grid for local folders
-- Per-type icons: folder, PDF, image, video, audio, code, text, archive, generic file
+- Per-type icons: folder, PDF, image, video, audio, code, text, archive, executable, generic file
+- Real thumbnails in Icons view (Finder-style cover-crop): images, video first-frames, PDF first-pages (scrollbars hidden, no scrolling — empty/corrupt PDFs are detected by their magic bytes and keep their icon instead of showing Chrome's error bar), and text/code as a tiny paper miniature of the whole document (indentation kept, wraps inside the icon) — lazy-loaded on scroll, files over 50 MB stay as icons (text previews are byte-capped instead, so even huge logs are cheap), List view stays icons-only
 - Breadcrumb title bar built from the URL path
 - Search box in the title bar: filters the current folder by name (per-folder, not recursive)
 - Settings menu (gear, top right):
+  - Show thumbnails toggle, stored in `localStorage`
   - Sort by: `Name / Size / Date Modified / Type (folders first) / Files first` stored in `localStorage`
   - Show hidden files toggle (dotfiles like `.DS_Store`)
   - One icon size slider that follows the active view: grid icons (`48–256`) in Icons view, row icons (`16–48`) in List view — each view keeps its own size in `localStorage`
@@ -64,7 +66,7 @@ Makes your browser's `file://` folder listing look and behave like a macOS Finde
 </table>
 
 ## What's next?
-- Show actual thumbnails for the files, insted of the current svg images
+
 - Drag-and-drop, rename/delete
 
 ## How it works
@@ -74,17 +76,18 @@ Makes your browser's `file://` folder listing look and behave like a macOS Finde
 3. Parses `<a href>` rows into `{ name, href, isDir, ext, isHidden, sizeText, sizeBytes, dateText, dateMs }`, skipping the parent-directory row
 4. Wipes `<body>` and renders the Finder UI (title bar + search + toolbar + grid/list + status bar)
 5. Background-tab opens (single: `Cmd/Ctrl+click`, middle-click; bulk: `Cmd/Ctrl+Enter` or the context menu with 2+ selected) go through `background.js` via `chrome.tabs.create({ active: false })`, so the folder tab stays focused
+6. Text/code previews go through `background.js` too (`finder-fetch-text`): content scripts can't `fetch()` `file://` URLs, but the worker can with the same `file://` permission — it reads the first 64 KB, rejects binaries, and the tile renders the first lines as `textContent` (never HTML)
 
 ## Permissions & privacy
 
 - Host access: `file:///*` only
-- Storage: `localStorage` only (`finderSortMode`, `finderShowHidden`, `finderViewMode`, `finderIconSize`, `finderListIconSize`, `finderListSortDir`)
+- Storage: `localStorage` only (`finderSortMode`, `finderShowHidden`, `finderShowThumbnails`, `finderViewMode`, `finderIconSize`, `finderListIconSize`, `finderListSortDir`)
 - Tabs: background worker opens background tabs next to the folder tab (`chrome.tabs.create` with `active: false`)
 
 ## Known limitations (v0.2)
 
 - Chromium only, no Firefox yet
-- No real thumbnails (image/PDF previews)
+- HEIC photos and mkv/avi videos keep generic icons (Chrome can't render them for previews)
 - Search filters the current folder only, no subfolders
 - No drag-and-drop, no rename/delete
 - Not yet packaged for the Chrome Web Store
