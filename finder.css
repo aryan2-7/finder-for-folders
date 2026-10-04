@@ -47,6 +47,40 @@ html, body.finder-body {
   padding: 0 2px;
 }
 
+/* quick filter in the titlebar, shrinks on narrow windows instead of pushing stuff out */
+.finder-search {
+  flex: 0 1 200px;
+  min-width: 120px;
+  margin-left: 12px;
+}
+
+.finder-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid #3d3d3d;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #e6e6e6;
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+}
+
+.finder-search-input::placeholder {
+  color: #7d7d7d;
+}
+
+.finder-search-input:focus {
+  border-color: #0a84ff;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.finder-search-input::-webkit-search-cancel-button {
+  cursor: pointer;
+}
+
 /* sort settings dropdown, top right of the titlebar */
 .finder-settings {
   position: relative;
@@ -163,6 +197,7 @@ html, body.finder-body {
 /* --icon-size drives tile/grid scale too, set via the settings slider (defaults to 125px) */
 .finder-body {
   --icon-size: 125px;
+  --list-icon-size: 28px;
 }
 
 .finder-grid {
@@ -239,6 +274,23 @@ html, body.finder-body {
   padding: 60px 0;
 }
 
+/* clear button under the "no matches" empty state */
+.finder-empty-btn {
+  margin-top: 10px;
+  padding: 4px 12px;
+  border: 1px solid #3d3d3d;
+  border-radius: 6px;
+  background: #2b2b2b;
+  color: #e6e6e6;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: default;
+}
+
+.finder-empty-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 /* right-click context menu, reuses the settings dropdown look but positioned at the cursor */
 .finder-context-menu {
   position: fixed;
@@ -296,7 +348,7 @@ html, body.finder-body {
 
 .finder-list-header {
   display: grid;
-  grid-template-columns: 1fr 130px;
+  grid-template-columns: minmax(0, 1fr) 90px minmax(120px, 170px) 110px;
   gap: 8px;
   padding: 8px 10px;
   margin-top: 12px;
@@ -312,12 +364,50 @@ html, body.finder-body {
   z-index: 5;
 }
 
+.finder-list-col-size {
+  text-align: right;
+  /* pull away from the date column, right-aligned sizes looked stuck to it */
+  padding-right: 26px;
+}
+
+/* header cells are buttons now so columns are sortable, same look as before */
+.finder-list-col {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: default;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.finder-list-col:hover {
+  color: #e6e6e6;
+}
+
+.finder-list-col.sorted {
+  color: #e6e6e6;
+}
+
+/* keep size right-aligned after the generic button reset above */
+button.finder-list-col-size {
+  text-align: right;
+  padding-right: 26px;
+}
+
 .finder-row {
   display: grid !important;
-  grid-template-columns: 1fr 130px;
+  grid-template-columns: minmax(0, 1fr) 90px minmax(120px, 170px) 110px;
   align-items: center;
   gap: 8px;
   height: auto !important;
+  min-height: calc(var(--list-icon-size) + 12px);
   padding: 6px 10px;
   border-radius: 6px;
   flex-direction: row;
@@ -332,8 +422,8 @@ html, body.finder-body {
 }
 
 .finder-row-name .finder-icon {
-  width: 20px;
-  height: 20px;
+  width: var(--list-icon-size);
+  height: var(--list-icon-size);
   margin-bottom: 0;
   flex-shrink: 0;
 }
@@ -355,6 +445,49 @@ html, body.finder-body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* size is right-aligned like Finder, date/kind stay left-aligned */
+.finder-row-size {
+  font-size: 12px;
+  color: #9a9a9a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
+  /* same breathing room as the header so sizes sit left of the date column */
+  padding-right: 26px;
+}
+
+.finder-row-date {
+  font-size: 12px;
+  color: #9a9a9a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* hide the less-important columns on narrow windows so name + size still fit */
+@media (max-width: 700px) {
+  .finder-list-header,
+  .finder-row {
+    grid-template-columns: minmax(0, 1fr) 90px 110px;
+  }
+  .finder-list-col-date,
+  .finder-row-date {
+    display: none;
+  }
+}
+
+@media (max-width: 500px) {
+  .finder-list-header,
+  .finder-row {
+    grid-template-columns: minmax(0, 1fr) 80px;
+  }
+  .finder-list-col-kind,
+  .finder-row-kind {
+    display: none;
+  }
 }
 
 .finder-row.selected {
