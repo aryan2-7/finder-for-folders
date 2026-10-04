@@ -6,7 +6,7 @@ Makes your browser's `file://` folder listing look and behave like a macOS Finde
 
 - Finder-style dark icon grid for local folders
 - Per-type icons: folder, PDF, image, video, audio, code, text, archive, executable, generic file
-- Real thumbnails in Icons view (Finder-style cover-crop): images, video first-frames, PDF first-pages (scrollbars hidden, no scrolling — empty/corrupt PDFs are detected by their magic bytes and keep their icon instead of showing Chrome's error bar), and text/code as a tiny paper miniature of the whole document (indentation kept, wraps inside the icon) — lazy-loaded on scroll, files over 50 MB stay as icons (text previews are byte-capped instead, so even huge logs are cheap), List view stays icons-only
+- Real thumbnails in Icons view (Finder-style cover-crop): images, video first-frames, PDF first-pages rendered with the bundled pdf.js (exact pixels, no viewer scrollbars or gaps — empty/corrupt PDFs keep their icon), and text/code as a tiny paper miniature of the whole document (indentation kept, wraps inside the icon) — lazy-loaded on scroll, files over 50 MB stay as icons (text previews are byte-capped instead, so even huge logs are cheap), List view stays icons-only
 - Breadcrumb title bar built from the URL path
 - Search box in the title bar: filters the current folder by name (per-folder, not recursive)
 - Settings menu (gear, top right):
@@ -77,6 +77,7 @@ Makes your browser's `file://` folder listing look and behave like a macOS Finde
 4. Wipes `<body>` and renders the Finder UI (title bar + search + toolbar + grid/list + status bar)
 5. Background-tab opens (single: `Cmd/Ctrl+click`, middle-click; bulk: `Cmd/Ctrl+Enter` or the context menu with 2+ selected) go through `background.js` via `chrome.tabs.create({ active: false })`, so the folder tab stays focused
 6. Text/code previews go through `background.js` too (`finder-fetch-text`): content scripts can't `fetch()` `file://` URLs, but the worker can with the same `file://` permission — it reads the first 64 KB, rejects binaries, and the tile renders the first lines as `textContent` (never HTML)
+7. PDF previews render page 1 to canvas with the locally bundled pdf.js (`vendor-pdf.min.js` + worker): the worker fetches the file bytes (`finder-fetch-pdf`), the tile renders at 2x, caches the PNG data URL for re-renders — no viewer chrome, so no scrollbars, gaps, or error bars
 
 ## Permissions & privacy
 
@@ -96,8 +97,9 @@ Makes your browser's `file://` folder listing look and behave like a macOS Finde
 
 ```
 manifest.json  # MV3 manifest, version 0.1.0
+vendor-pdf.min.js + vendor-pdf.worker.min.js  # pdf.js v3 (local, renders PDF thumbs, no CDN)
 content.js     # parsing + rendering + interactions
-background.js  # opens background tabs via chrome.tabs.create
+background.js  # background tabs + file-byte fetching for previews
 finder.css     # Finder dark theme
 LICENSE        # MIT
 README.md      # this file

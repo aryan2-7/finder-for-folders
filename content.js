@@ -880,37 +880,54 @@
     }
   }
 
+  // PDF page-1 rendering via the bundled pdf.js (exact pixels, no viewer
+  // chrome: no scrollbars, no gaps, no error bars — any failure keeps the icon)
+  let pdfLibMissingWarned = false;
+  try {
+    if (typeof pdfjsLib !== "undefined" && chrome && chrome.runtime && chrome.runtime.getURL) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL("vendor-pdf.worker.min.js");
+    } else if (!pdfLibMissingWarned) {
+      pdfLibMissingWarned = true;
+      console.warn("[finder] vendor-pdf.min.js didn't load — reload the extension on chrome://extensions so the manifest change applies; PDF previews stay icons until then.");
+    }
+  } catch (e) {
+    // worker failed to configure — pdf.js falls back to its fake worker
+  }
+
+  const PDF_RENDER_MAX_BYTES = 15 * 1024 * 1024;
+
   // PDF probe results, cached per page load so re-renders don't refetch.
   // target -> true (render it) or false (keep the icon, never retry)
   const pdfThumbCache = new Map();
+  // finished first-page renders, cached as data URLs so re-renders
+  // (sort flips, view switches) reuse them instead of re-parsing
+  const pdfImageCache = new Map();
 
-  // empty/corrupt PDFs make Chrome's viewer render a "Failed to load PDF
-  // document" error bar inside the thumbnail — probe the magic bytes first
-  // and drop those back to the icon instead
+  // broken PDFs fail parsing here (no viewer, no error bar) —
+  // they keep their icon instead. Every failure logs its cause.
+  function pdfFail(target, wrap, why) {
+    console.warn("[finder:pdf] " + why + " — keeping icon:", target);
+    pdfThumbCache.set(target, false);
+    if (wrap.isConnected) wrap.remove();
+  }
+
   function requestPdfThumb(el, src) {
     const target = src || el.dataset.thumbSrc;
-    if (!target) return;
+    if (!target) {
+      console.warn("[finder:pdf] no target URL, keeping icon");
+      return;
+    }
     delete el.dataset.thumbSrc;
-    const show = () => {
-      // re-renders discard tiles; never load into a detached one
-      if (!el.isConnected) return;
-      el.src = target;
-      // <embed> fires no reliable load event, just fade in its wrapper —
-      // the icon underneath covers the brief blank flash
-      setTimeout(() => {
-        const showEl = el._showTarget || el;
-        showEl.classList.add("loaded");
-        // preview's in — drop the fallback icon behind it
-        if (showEl.parentElement) showEl.parentElement.classList.add("thumb-on");
-      }, 600);
-    };
-    const drop = () => {
-      const wrap = el._showTarget || el;
-      if (wrap.isConnected) wrap.remove();
-    };
+    const wrap = el._showTarget || el;
+    const drop = () => pdfFail(target, wrap, "dropped");
+    // monster PDFs stay icons, the worker fetch is bounded anyway
+    if (typeof el._pdfSize === "number" && el._pdfSize > PDF_RENDER_MAX_BYTES) {
+      pdfFail(target, wrap, "over 15MB size cap");
+      return;
+    }
     if (pdfThumbCache.has(target)) {
-      if (pdfThumbCache.get(target)) show();
-      else drop();
+      if (pdfThumbCache.get(target)) renderPdfPage(el, target, wrap, drop);
+      else if (wrap.isConnected) wrap.remove();
       return;
     }
     let result = null;
@@ -924,21 +941,127 @@
     if (result && typeof result.then === "function") {
       result.then((res) => {
         if (!res || !res.ok) {
-          // probe itself failed, not the file — render like before probing
-          pdfThumbCache.set(target, true);
-          show();
+          pdfFail(target, wrap, "probe message failed");
           return;
         }
-        pdfThumbCache.set(target, !!res.valid);
-        if (res.valid) show();
-        else drop();
-      }).catch(() => {
+        if (!res.valid) {
+          pdfFail(target, wrap, "not a PDF (magic bytes)");
+          return;
+        }
         pdfThumbCache.set(target, true);
-        show();
+        renderPdfPage(el, target, wrap, drop);
+      }).catch((e) => {
+        pdfFail(target, wrap, "probe threw: " + (e && e.message));
       });
     } else {
-      show();
+      pdfFail(target, wrap, "no message channel for probe");
     }
+  }
+
+  function base64ToUint8(base64) {
+    if (typeof Uint8Array.fromBase64 === "function") {
+      return Uint8Array.fromBase64(base64);
+    }
+    const binary = atob(base64);
+    const len = binary.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+  }
+
+  // bytes come from the background worker (content scripts can't fetch
+  // file:// URLs), page 1 renders to the tile's canvas at 2x for retina
+  function renderPdfPage(el, target, wrap, drop) {
+    let result = null;
+    try {
+      if (chrome && chrome.runtime && chrome.runtime.sendMessage) {
+        result = chrome.runtime.sendMessage({ type: "finder-fetch-pdf", url: target });
+      }
+    } catch (e) {
+      result = null; // no worker — icon stays
+    }
+    if (!result || typeof result.then !== "function") {
+      pdfFail(target, wrap, "no message channel for fetch");
+      return;
+    }
+    result.then((res) => {
+      if (!res || !res.ok || (!res.base64 && !res.buf)) {
+        pdfFail(target, wrap, "worker fetch failed");
+        return;
+      }
+      let bytes = null;
+      if (typeof res.base64 === "string") {
+        try {
+          bytes = base64ToUint8(res.base64);
+        } catch (e) {
+          pdfFail(target, wrap, "base64 decode failed: " + (e && e.message));
+          return;
+        }
+      } else if (res.buf instanceof Uint8Array) {
+        bytes = res.buf;
+      } else if (res.buf instanceof ArrayBuffer) {
+        bytes = new Uint8Array(res.buf);
+      } else if (res.buf && typeof res.buf === "object") {
+        if (typeof res.buf.length === "number") {
+          bytes = new Uint8Array(res.buf);
+        } else {
+          const vals = Object.values(res.buf);
+          if (vals.length > 0) {
+            bytes = new Uint8Array(vals);
+          }
+        }
+      }
+      if (!bytes || bytes.length === 0) {
+        pdfFail(target, wrap, "empty PDF buffer from worker");
+        return;
+      }
+      if (!el.isConnected) {
+        return; // tile re-rendered mid-fetch, nothing to populate
+      }
+      if (res.truncated) {
+        pdfFail(target, wrap, "over 15MB, not fetched whole");
+        return;
+      }
+      if (typeof pdfjsLib === "undefined") {
+        pdfFail(target, wrap, "pdfjsLib missing (vendor script not loaded?)");
+        return;
+      }
+      let task = null;
+      try {
+        task = pdfjsLib.getDocument({ data: bytes });
+      } catch (e) {
+        pdfFail(target, wrap, "getDocument threw: " + (e && e.message));
+        return;
+      }
+      task.promise.then((doc) => {
+        doc.getPage(1).then((page) => {
+          if (!el.isConnected) {
+            doc.destroy();
+            return;
+          }
+          const scale = (iconSize * 2) / page.getViewport({ scale: 1 }).width;
+          const viewport = page.getViewport({ scale });
+          el.width = Math.max(1, Math.floor(viewport.width));
+          el.height = Math.max(1, Math.floor(viewport.height));
+          page.render({ canvasContext: el.getContext("2d"), viewport }).promise.then(() => {
+            doc.destroy();
+            if (!el.isConnected) return;
+            try {
+              pdfImageCache.set(target, el.toDataURL("image/png"));
+            } catch (e) {
+              // canvas not cacheable — show it anyway, just don't cache
+            }
+            wrap.classList.add("loaded");
+            if (wrap.parentElement) wrap.parentElement.classList.add("thumb-on");
+          }).catch((e) => {
+            doc.destroy();
+            pdfFail(target, wrap, "page render failed: " + (e && e.message));
+          });
+        }).catch((e) => pdfFail(target, wrap, "getPage failed: " + (e && e.message)));
+      }).catch((e) => pdfFail(target, wrap, "PDF parse failed: " + (e && e.message)));
+    }).catch((e) => pdfFail(target, wrap, "fetch threw: " + (e && e.message)));
   }
 
   // one observer per render: thumbnails only fetch once they scroll near the
@@ -968,9 +1091,8 @@
           el.preload = "metadata";
           el.src = src;
           el.load();
-        } else if (el.tagName === "EMBED") {
-          // PDFs probe their magic bytes first, broken ones stay icons.
-          // (src was already pulled out of the dataset above, pass it along)
+        } else if (el.tagName === "CANVAS") {
+          // PDFs render page 1 to this canvas via the bundled pdf.js
           requestPdfThumb(el, src);
         } else {
           el.src = src;
@@ -1076,26 +1198,43 @@
         }
         iconWrap.appendChild(pre);
       } else if (tk === "pdf") {
-        // PDFs: first page only. The viewer can't scroll (pointer-events
-        // are off on .finder-thumb) and its scrollbars are hidden two ways:
-        // the scrollbar=0 param, plus the embed running 14px wider than its
-        // overflow-hidden wrapper so any rendered scrollbar is clipped away
+        // PDFs: page 1 rendered to canvas via the bundled pdf.js — exact
+        // pixels, no viewer chrome. Rendered pages cache as data URLs so
+        // re-renders reuse them instead of re-parsing.
         const fileUrl = new URL(entry.href, location.href).href;
-        const target = fileUrl + "#page=1&zoom=page-width&toolbar=0&navpanes=0&scrollbar=0";
-        const wrap = document.createElement("div");
-        wrap.className = "finder-thumb finder-thumb-pdf";
-        wrap.setAttribute("aria-hidden", "true");
-        const emb = document.createElement("embed");
-        emb.type = "application/pdf";
-        emb._showTarget = wrap;
-        wrap.appendChild(emb);
-        iconWrap.appendChild(wrap);
-        emb.dataset.thumbSrc = target;
-        if (thumbObserver) {
-          thumbObserver.observe(emb);
+        if (pdfImageCache.has(fileUrl)) {
+          const wrap = document.createElement("div");
+          wrap.className = "finder-thumb finder-thumb-pdf";
+          wrap.setAttribute("aria-hidden", "true");
+          const img = document.createElement("img");
+          img.decoding = "async";
+          img.alt = "";
+          img.src = pdfImageCache.get(fileUrl);
+          img.setAttribute("aria-hidden", "true");
+          img.addEventListener("load", () => {
+            wrap.classList.add("loaded");
+            if (wrap.parentElement) wrap.parentElement.classList.add("thumb-on");
+          });
+          img.addEventListener("error", () => wrap.remove());
+          wrap.appendChild(img);
+          iconWrap.appendChild(wrap);
         } else {
-          // no IntersectionObserver (very old browser): probe + load now
-          requestPdfThumb(emb);
+          const wrap = document.createElement("div");
+          wrap.className = "finder-thumb finder-thumb-pdf";
+          wrap.setAttribute("aria-hidden", "true");
+          const canvas = document.createElement("canvas");
+          canvas._showTarget = wrap;
+          canvas._pdfUrl = fileUrl;
+          canvas._pdfSize = entry.sizeBytes;
+          wrap.appendChild(canvas);
+          iconWrap.appendChild(wrap);
+          canvas.dataset.thumbSrc = fileUrl;
+          if (thumbObserver) {
+            thumbObserver.observe(canvas);
+          } else {
+            // no IntersectionObserver (very old browser): probe + render now
+            requestPdfThumb(canvas, fileUrl);
+          }
         }
       } else if (tk) {
         const fileUrl = new URL(entry.href, location.href).href;

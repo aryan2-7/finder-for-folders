@@ -62,6 +62,19 @@ function looksLikePdf(buf) {
   return head.trimStart().startsWith("%PDF-");
 }
 
+function uint8ToBase64(bytes) {
+  if (typeof bytes.toBase64 === "function") {
+    return bytes.toBase64();
+  }
+  let binary = "";
+  const len = bytes.byteLength;
+  const chunk = 0x8000;
+  for (let i = 0; i < len; i += chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + chunk, len)));
+  }
+  return btoa(binary);
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message.type !== "string") return;
 
@@ -84,6 +97,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     fetchHeadBytes(message.url, 4096).then(
       (r) => sendResponse({ ok: true, valid: looksLikePdf(r.buf) }),
+      () => sendResponse({ ok: false })
+    );
+    return true; // async response
+  }
+
+  if (message.type === "finder-fetch-pdf") {
+    if (typeof message.url !== "string") {
+      sendResponse({ ok: false });
+      return;
+    }
+    // whole file (bounded) — pdf.js parses from these bytes directly.
+    // Base64-encoded because Chrome extension message passing serializes
+    // messages with JSON, which converts typed arrays into plain objects
+    // without length and strips TypedArray methods.
+    fetchHeadBytes(message.url, 15 * 1024 * 1024).then(
+      (r) => sendResponse({ ok: true, base64: uint8ToBase64(r.buf), truncated: r.truncated }),
       () => sendResponse({ ok: false })
     );
     return true; // async response
